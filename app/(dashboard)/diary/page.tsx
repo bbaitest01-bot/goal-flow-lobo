@@ -48,6 +48,9 @@ const aiReflections = [
 
 export default function DiaryPage() {
   // --- 狀態管理 ---
+  // [cite: 182]
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
   const [entries, setEntries] = useState<DiaryEntry[]>([])
   const [presets, setPresets] = useState<MoodPreset[]>([])
   
@@ -72,28 +75,26 @@ export default function DiaryPage() {
     year: 'numeric' 
   })
 
-  // --- 1. 抓取資料庫 ---
-  const fetchData = async () => {
-    // 抓取日記
-    const { data: diariesData } = await supabase
-      .from("diaries")
-      .select("*")
-      .eq("is_deleted", false)
-      .order("created_at", { ascending: false })
-    if (diariesData) setEntries(diariesData)
+const fetchData = async () => {
+  // 抓取日記
+  const { data: diariesData, error: diaryError } = await supabase
+    .from("diaries")
+    .select("*")
+    .eq("is_deleted", false) // 👈 新增這一行：只抓取沒有被刪除的
+    .order("created_at", { ascending: false })
+  
+  if (diaryError) console.error("日記抓取失敗:", diaryError.message)
+  else if (diariesData) setEntries(diariesData)
 
-    // 抓取自訂心情標籤
-    const { data: presetsData } = await supabase
-      .from("user_mood_presets")
-      .select("*")
-      .order("created_at", { ascending: true })
-    if (presetsData) setPresets(presetsData)
-  }
+  // 抓取自訂心情標籤
+  const { data: presetsData, error: presetError } = await supabase
+    .from("user_mood_presets")
+    .select("*")
+    .order("created_at", { ascending: true })
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
+  if (presetError) console.error("標籤抓取失敗:", presetError.message)
+  else if (presetsData) setPresets(presetsData)
+}
   // --- 2. 標籤管理 (Presets) ---
   const handleAddPreset = async () => {
     if (!newMoodText.trim()) return
@@ -116,7 +117,7 @@ export default function DiaryPage() {
     e.stopPropagation() // 防止點到外層的選擇器
     const { error } = await supabase
       .from("user_mood_presets")
-      .delete() // 真實刪除 (Hard Delete)
+      .update({ is_deleted: true }) // 👈 改成這樣：溫柔地貼上標籤
       .eq("id", id)
 
     if (!error) {
@@ -151,18 +152,48 @@ export default function DiaryPage() {
     }
     setIsSubmitting(false)
   }
+// [cite: 183]
+const handleUpdateEntry = async (id: string) => {
+  const { error } = await supabase
+    .from("diaries")
+    .update({ content: editContent })
+    .eq("id", id);
 
-  const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const { error } = await supabase
-      .from("diaries")
-      .update({ is_deleted: true }) // 邏輯刪除
-      .eq("id", id)
-
-    if (!error) {
-      setEntries(entries.filter(entry => entry.id !== id))
-    }
+  if (!error) {
+    setEditingId(null); // 關閉編輯模式
+    fetchData();        // 重新抓取資料，讓畫面更新
+  } else {
+    console.error("更新失敗:", error.message);
   }
+};
+useEffect(() => {
+      fetchData();
+    }, []);
+  // 找到重複的地方，只留下這一段就好
+const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
+  // 防止點擊按鈕時，觸發到外層卡片的點擊事件
+  e.stopPropagation();
+
+  // 確認視窗（可加可不加，建議加上比較安全）
+  if (!confirm("確定要將此日記移至垃圾桶嗎？")) return;
+
+  const { error } = await supabase
+    .from("diaries")
+    .update({ 
+      is_deleted: true, 
+      deleted_at: new Date().toISOString() 
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("刪除失敗:", error.message);
+    alert("刪除失敗，請稍後再試");
+  } else {
+    // 成功後重新抓取清單
+    fetchData();
+    alert("已移至垃圾桶");
+  }
+};
 
   return (
     <div className="flex flex-col gap-6">
@@ -361,7 +392,25 @@ export default function DiaryPage() {
                       </div>
                       <CollapsibleContent>
                         <div className="border-t border-border/40 p-4">
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                          <div className="mt-2 text-slate-300">
+                            {editingId === entry.id ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white"
+                                  value={editContent}
+                                  onChange={(e) => setEditContent(e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                  <button onClick={() => handleUpdateEntry(entry.id)} className="text-xs bg-blue-600 px-2 py-1 rounded">儲存</button>
+                                  <button onClick={() => setEditingId(null)} className="text-xs bg-slate-700 px-2 py-1 rounded">取消</button>
+                                </div>
+                              </div>
+                              ) : (
+                              <p onClick={() => { setEditingId(entry.id); setEditContent(entry.content); }} className="cursor-pointer hover:bg-slate-800/50 p-2 rounded transition-colors">
+                                {entry.content}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </div>

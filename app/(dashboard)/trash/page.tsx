@@ -82,8 +82,28 @@ export default function TrashPage() {
         </TabsContent>
 
         <TabsContent value="diaries" className="mt-4">
-           {/* 日記的部分邏輯雷同，你之後可以根據 diaries 的欄位名稱微調 */}
-           <p className="text-center py-10 text-muted-foreground">Diary trash feature coming soon.</p>
+          <div className="grid gap-3">
+            {deletedDiaries.map((diary) => (
+              <Card key={diary.id} className="border-border/40 bg-card/50">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {/* 這裡我們用 FileText (文件圖示) 來代表日記 */}
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    {/* 日記顯示內容，加了 truncate 避免字太長破版 */}
+                    <span className="line-through text-muted-foreground truncate max-w-[200px] sm:max-w-[400px]">
+                      {diary.content}
+                    </span>
+                  </div>
+                  {/* 點擊復原時，傳入 "diaries" 資料表與該日記的 id */}
+                  <Button variant="ghost" size="sm" onClick={() => handleRestore("diaries", diary.id)}>
+                    <RefreshCcw className="h-4 w-4 mr-2" /> 復原
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+            {/* 如果沒有被刪除的日記，顯示這段文字 */}
+            {deletedDiaries.length === 0 && <p className="text-center py-10 text-muted-foreground">垃圾桶空空如也，沒有被刪除的日記。</p>}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
