@@ -89,3 +89,26 @@
     @apply bg-background text-foreground;
   }
 }
+/* 自訂深色滑軌樣式 */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.4); /* 深色背景 */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #52525b; /* 滑桿顏色 */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #71717a;
+}
+
+/* 讓標籤不要被擠壓 */
+.no-shrink {
+  flex-shrink: 0;
+}
