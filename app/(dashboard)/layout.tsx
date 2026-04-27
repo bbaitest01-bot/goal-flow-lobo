@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useTranslation } from "react-i18next"
+import myI18n from "@/lib/i18n";
 import {
   LayoutDashboard,
   Target,
@@ -25,40 +27,40 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 
-const sidebarItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Target, label: "Goals", href: "/goals" },
-  { icon: CheckSquare, label: "Tasks", href: "/tasks" },
-  { icon: ClipboardList, label: "Chores", href: "/chores" },
-  { icon: BookHeart, label: "Diary", href: "/diary" },
-  { icon: Trophy, label: "Hall of Fame", href: "/hall-of-fame" },
-  { icon: Trash2, label: "Trash", href: "/trash" },
-  { icon: Settings, label: "Settings", href: "/settings" },
-]
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // 👇 1. 喚醒翻譯官
+  const { t } = useTranslation();
+  
+  const toggleLanguage = () => {
+    const currentLang = myI18n.language || 'en';
+    const newLang = currentLang === 'zh' ? 'en' : 'zh';
+    myI18n.changeLanguage(newLang);
+  };
 
-const coachMessages = [
-  { 
-    type: "coach" as const, 
-    content: "Good morning! You've got 3 tasks on your plate today. Let's see if you can actually finish them this time." 
-  },
-  { 
-    type: "user" as const, 
-    content: "What should I focus on first?" 
-  },
-  { 
-    type: "coach" as const, 
-    content: "Start with 'Review literature notes' - it's only RPE 4 and will warm you up. Save the heavy lifting for when you're caffeinated." 
-  },
-]
+  // 👇 2. 乾淨、聽話的雙語選單
+  const sidebarItems = [
+    { icon: LayoutDashboard, label: t('sidebar.dashboard'), href: "/dashboard" },
+    { icon: Target, label: t('sidebar.goals'), href: "/goals" },
+    { icon: CheckSquare, label: t('sidebar.tasks'), href: "/tasks" },
+    { icon: ClipboardList, label: t('sidebar.chores'), href: "/chores" },
+    { icon: BookHeart, label: t('sidebar.diaries'), href: "/diary" },
+    { icon: Trophy, label: t('sidebar.hall_of_fame'), href: "/hall-of-fame" },
+    { icon: Trash2, label: t('sidebar.trash'), href: "/trash" },
+    { icon: Settings, label: t('sidebar.settings'), href: "/settings" },
+  ];
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const pathname = usePathname()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [coachInput, setCoachInput] = useState("")
+  // 👇 3. 保留你原本的狀態變數
+  const pathname = usePathname();
+  const [coachInput, setCoachInput] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const coachMessages = [
+    { role: "coach", content: "Great job completing your morning routine! Ready to tackle your main goal for today?" },
+    { role: "user", content: "I'm feeling a bit tired." },
+    { role: "coach", content: "That's completely normal. Why don't we start with a smaller task to build momentum? How about reviewing your notes for 15 minutes?" }
+  ];
+  // ------------------------------------------------------------------
+  // 👉 你的 return ( ... 這裡開始的畫面代碼通通不用動！保留原狀！
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -118,7 +120,16 @@ export default function DashboardLayout({
               })}
             </nav>
           </ScrollArea>
-
+          {/* 語言切換按鈕 */}
+            <div className="px-3 py-4 mt-auto border-t border-border/40">
+              <Button 
+                onClick={toggleLanguage} 
+                variant="outline" 
+                className="w-full text-xs bg-muted/30 hover:bg-muted/50 gap-2"
+              >
+                🌐 {myI18n.language === 'zh' ? 'Switch to English' : '切換為繁體中文'}
+              </Button>
+            </div>  
           {/* User Section */}
           <div className="border-t border-sidebar-border p-4">
             <div className="flex items-center gap-3">

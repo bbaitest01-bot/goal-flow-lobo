@@ -1,0 +1,12 @@
+{
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "goals": "Goals",
+    "tasks": "Tasks",
+    "chores": "Chores",
+    "diaries": "Diary",
+    "hall_of_fame": "Hall of Fame",
+    "trash": "Trash",
+    "settings": "Settings"
+  }
+}
