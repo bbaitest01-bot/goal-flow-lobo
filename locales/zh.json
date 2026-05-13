@@ -1,0 +1,12 @@
+{
+  "sidebar": {
+    "dashboard": "儀表板",
+    "goals": "目標",
+    "tasks": "任務",
+    "chores": "日常瑣事",
+    "diaries": "日記",
+    "hall_of_fame": "榮譽榜",
+    "trash": "垃圾桶",
+    "settings": "設定"
+  }
+}
