@@ -1,3 +1,7 @@
+"use client"
+
+import { useState, useEffect } from "react" // 🌟 引入 hook
+import { supabase } from "@/lib/supabase"  // 🌟 引入 supabase
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,32 +20,15 @@ import {
 import Link from "next/link"
 import { TodaysTasks } from "@/components/todays-tasks"
 
-const activeGoals = [
-  { 
-    id: 1, 
-    title: "Graduation Project", 
-    progress: 68, 
-    deadline: "Apr 15, 2024",
-    tasks: 12,
-    completedTasks: 8
-  },
-  { 
-    id: 2, 
-    title: "Learn React Advanced", 
-    progress: 45, 
-    deadline: "May 1, 2024",
-    tasks: 8,
-    completedTasks: 4
-  },
-  { 
-    id: 3, 
-    title: "Build Portfolio", 
-    progress: 20, 
-    deadline: "Jun 1, 2024",
-    tasks: 6,
-    completedTasks: 1
-  },
-]
+// 建立目標的型別
+interface Goal {
+  id: string
+  title: string
+  progress: number
+  deadline: string
+  tasks: number
+  completedTasks: number
+}
 
 const todaysChores = [
   { id: 1, title: "Reply to emails", rpe: 2, done: true },
@@ -49,7 +36,6 @@ const todaysChores = [
   { id: 3, title: "Schedule meeting", rpe: 1, done: false },
 ]
 
-// Weekly activity data for heatmap
 const weeklyActivity = [
   [2, 4, 3, 5, 2, 1, 0],
   [3, 5, 4, 6, 3, 2, 1],
@@ -58,9 +44,40 @@ const weeklyActivity = [
 ]
 
 export default function DashboardPage() {
+  const [activeGoals, setActiveGoals] = useState<Goal[]>([]) // 🌟 改用 state 管理目標
   const energyUsed = 55
   const totalEnergy = 100
   const remainingEnergy = totalEnergy - energyUsed
+
+  // 🌟 連線撈取真正屬於目前登入者的目標
+  const fetchGoals = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", user.id) // 🔒 帳號隔離防線
+
+    if (error) {
+      console.error("目標撈取失敗:", error.message)
+    } else if (data) {
+      // 轉換後端資料格式以對齊前端 UI
+      const formattedGoals = data.map((g: any) => ({
+        id: g.id,
+        title: g.title || "未命名目標",
+        progress: g.progress_percent || 0, // 對齊資料庫裡的進度欄位，若名稱不同可再微調
+        deadline: g.target_date || "無截止日",
+        tasks: 10,
+        completedTasks: 4
+      }))
+      setActiveGoals(formattedGoals)
+    }
+  }
+
+  useEffect(() => {
+    fetchGoals()
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -146,28 +163,32 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {activeGoals.map((goal) => (
-              <Link key={goal.id} href={`/goals/${goal.id}`}>
-                <div className="group rounded-lg border border-border/40 bg-muted/20 p-4 transition-colors hover:bg-muted/40">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <h3 className="font-medium group-hover:text-primary transition-colors">{goal.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {goal.completedTasks}/{goal.tasks} tasks
-                      </p>
+            {activeGoals.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-4 text-center">目前尚無進行中的目標</p>
+            ) : (
+              activeGoals.map((goal) => (
+                <Link key={goal.id} href={`/goals/${goal.id}`}>
+                  <div className="group rounded-lg border border-border/40 bg-muted/20 p-4 transition-colors hover:bg-muted/40">
+                    <div className="mb-3 flex items-start justify-between">
+                      <div>
+                        <h3 className="font-medium group-hover:text-primary transition-colors">{goal.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {goal.completedTasks}/{goal.tasks} tasks
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        <Clock className="mr-1 h-3 w-3" />
+                        {goal.deadline}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      <Clock className="mr-1 h-3 w-3" />
-                      {goal.deadline}
-                    </Badge>
+                    <div className="flex items-center gap-3">
+                      <Progress value={goal.progress} className="h-2 flex-1" />
+                      <span className="text-sm font-medium">{goal.progress}%</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Progress value={goal.progress} className="h-2 flex-1" />
-                    <span className="text-sm font-medium">{goal.progress}%</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))
+            )}
           </CardContent>
         </Card>
 
