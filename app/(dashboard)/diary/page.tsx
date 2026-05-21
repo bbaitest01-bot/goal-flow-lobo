@@ -36,7 +36,7 @@ interface DiaryEntry {
   id: string
   target_date: string
   mood_tag: string
-  mood_color: string // 新增的顏色欄位
+  mood_color: string 
   energy_level: number
   content: string
 }
@@ -49,7 +49,6 @@ const aiReflections = [
 
 export default function DiaryPage() {
   // --- 狀態管理 ---
-  // [cite: 182]
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [entries, setEntries] = useState<DiaryEntry[]>([])
@@ -57,7 +56,7 @@ export default function DiaryPage() {
   
   const [todayEntry, setTodayEntry] = useState({
     mood: "",
-    moodColor: "", // 記錄當下選中的顏色
+    moodColor: "", 
     energyFeeling: 5,
     content: ""
   })
@@ -68,7 +67,7 @@ export default function DiaryPage() {
   // 新增標籤的狀態
   const [isAddingPreset, setIsAddingPreset] = useState(false)
   const [newMoodText, setNewMoodText] = useState("")
-  const [newMoodColor, setNewMoodColor] = useState("#8B5CF6") // 預設給個紫色
+  const [newMoodColor, setNewMoodColor] = useState("#8B5CF6") 
 
   const today = new Date().toLocaleDateString('zh-TW', { 
     month: 'long', 
@@ -76,54 +75,69 @@ export default function DiaryPage() {
     year: 'numeric' 
   })
 
-const fetchData = async () => {
-  // 抓取日記
-  const { data: diariesData, error: diaryError } = await supabase
-    .from("diaries")
-    .select("*")
-    .eq("is_deleted", false) // 👈 新增這一行：只抓取沒有被刪除的
-    .order("created_at", { ascending: false })
-  
-  if (diaryError) console.error("日記抓取失敗:", diaryError.message)
-  else if (diariesData) setEntries(diariesData)
+  // --- 1. 認人抓取資料 (Fetch Data with user_id) ---
+  const fetchData = async () => {
+    // 🚀 先向門衛請求「目前登入的使用者身分證明」
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error("未找到登入的使用者資訊，請重新登入:", authError?.message)
+      return
+    }
 
-  // 抓取自訂心情標籤
-  const { data: presetsData, error: presetError } = await supabase
-    .from("user_mood_presets")
-    .select("*")
-    .order("created_at", { ascending: true })
+    // 🎯 抓取「僅屬於目前登入者」的日記
+    const { data: diariesData, error: diaryError } = await supabase
+      .from("diaries")
+      .select("*")
+      .eq("user_id", user.id)   // 🌟 核心：只撈符合自己 user_id 的日記
+      .eq("is_deleted", false) 
+      .order("created_at", { ascending: false })
+    
+    if (diaryError) console.error("日記抓取失敗:", diaryError.message)
+    else if (diariesData) setEntries(diariesData)
 
-  if (presetError) console.error("標籤抓取失敗:", presetError.message)
-  else if (presetsData) setPresets(presetsData)
-}
+    // 🎯 抓取「僅屬於目前登入者」的自訂心情標籤
+    const { data: presetsData, error: presetError } = await supabase
+      .from("user_mood_presets")
+      .select("*")
+      .eq("user_id", user.id)   // 🌟 核心：心情標籤也認人！沛涵建的蘿蔔組長看不到
+      .order("created_at", { ascending: true })
+
+    if (presetError) console.error("標籤抓取失敗:", presetError.message)
+    else if (presetsData) setPresets(presetsData)
+  }
+
   // --- 2. 標籤管理 (Presets) ---
   const handleAddPreset = async () => {
     if (!newMoodText.trim()) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
     const { error } = await supabase
       .from("user_mood_presets")
       .insert([{
         mood_text: newMoodText.trim(),
-        mood_color: newMoodColor
+        mood_color: newMoodColor,
+        user_id: user.id // 🌟 核心：新增心情時綁定當前 user_id
       }])
 
     if (!error) {
       setNewMoodText("")
       setIsAddingPreset(false)
-      fetchData() // 重新抓取
+      fetchData() 
     }
   }
 
   const handleDeletePreset = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation() // 防止點到外層的選擇器
+    e.stopPropagation() 
     const { error } = await supabase
       .from("user_mood_presets")
-      .update({ is_deleted: true }) // 👈 改成這樣：溫柔地貼上標籤
+      .update({ is_deleted: true }) 
       .eq("id", id)
 
     if (!error) {
       setPresets(presets.filter(p => p.id !== id))
-      // 如果刪除的剛好是目前選中的，就清空選取狀態
       if (todayEntry.mood === presets.find(p => p.id === id)?.mood_text) {
         setTodayEntry(prev => ({ ...prev, mood: "", moodColor: "" }))
       }
@@ -135,6 +149,12 @@ const fetchData = async () => {
     if (!todayEntry.mood || !todayEntry.content) return
     setIsSubmitting(true)
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setIsSubmitting(false)
+      return
+    }
+
     const todayISO = new Date().toISOString().split('T')[0]
 
     const { error } = await supabase
@@ -142,9 +162,10 @@ const fetchData = async () => {
       .insert([{
         content: todayEntry.content,
         mood_tag: todayEntry.mood,
-        mood_color: todayEntry.moodColor, // 存入色碼
+        mood_color: todayEntry.moodColor, 
         target_date: todayISO,
-        energy_level: todayEntry.energyFeeling
+        energy_level: todayEntry.energyFeeling,
+        user_id: user.id // 🌟 核心：儲存日記時綁定當前 user_id
       }])
 
     if (!error) {
@@ -153,48 +174,46 @@ const fetchData = async () => {
     }
     setIsSubmitting(false)
   }
-// [cite: 183]
-const handleUpdateEntry = async (id: string) => {
-  const { error } = await supabase
-    .from("diaries")
-    .update({ content: editContent })
-    .eq("id", id);
 
-  if (!error) {
-    setEditingId(null); // 關閉編輯模式
-    fetchData();        // 重新抓取資料，讓畫面更新
-  } else {
-    console.error("更新失敗:", error.message);
-  }
-};
-useEffect(() => {
-      fetchData();
-    }, []);
-  // 找到重複的地方，只留下這一段就好
-const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
-  // 防止點擊按鈕時，觸發到外層卡片的點擊事件
-  e.stopPropagation();
+  const handleUpdateEntry = async (id: string) => {
+    const { error } = await supabase
+      .from("diaries")
+      .update({ content: editContent })
+      .eq("id", id);
 
-  // 確認視窗（可加可不加，建議加上比較安全）
-  if (!confirm("確定要將此日記移至垃圾桶嗎？")) return;
+    if (!error) {
+      setEditingId(null); 
+      fetchData();        
+    } else {
+      console.error("更新失敗:", error.message);
+    }
+  };
 
-  const { error } = await supabase
-    .from("diaries")
-    .update({ 
-      is_deleted: true, 
-      deleted_at: new Date().toISOString() 
-    })
-    .eq("id", id);
-
-  if (error) {
-    console.error("刪除失敗:", error.message);
-    alert("刪除失敗，請稍後再試");
-  } else {
-    // 成功後重新抓取清單
+  useEffect(() => {
     fetchData();
-    alert("已移至垃圾桶");
-  }
-};
+  }, []);
+
+  const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!confirm("確定要將此日記移至垃圾桶嗎？")) return;
+
+    const { error } = await supabase
+      .from("diaries")
+      .update({ 
+        is_deleted: true, 
+        deleted_at: new Date().toISOString() 
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("刪除失敗:", error.message);
+      alert("刪除失敗，請稍後再試");
+    } else {
+      fetchData();
+      alert("已移至垃圾桶");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -238,7 +257,6 @@ const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
                         className="h-8 w-24 bg-transparent border-none focus-visible:ring-0 text-sm"
                         autoFocus
                       />
-                      {/* HTML5 原生色盤 */}
                       <input 
                         type="color" 
                         value={newMoodColor}
@@ -279,7 +297,6 @@ const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
                         >
                           {preset.mood_text}
                         </button>
-                        {/* 懸浮出現的硬刪除 X 按鈕 */}
                         <button
                           onClick={(e) => handleDeletePreset(preset.id, e)}
                           className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-white"
@@ -361,7 +378,6 @@ const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
                           <div className="flex-1 text-left">
                             <div className="flex items-center gap-3">
                               <span className="font-medium text-sm">{entry.target_date}</span>
-                              {/* 渲染資料庫紀錄的專屬顏色 */}
                               <Badge 
                                 variant="outline"
                                 style={{ 
@@ -422,7 +438,7 @@ const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
           </Card>
         </div>
 
-        {/* 右側 AI 區塊 (順便幫你中文化了) */}
+        {/* 右側 AI 區塊 */}
         <div className="flex flex-col gap-6">
           <Card className="border-accent/30 bg-gradient-to-br from-accent/10 to-pink-500/10">
             <CardHeader>
