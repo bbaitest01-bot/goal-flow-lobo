@@ -1,4 +1,6 @@
-import Link from "next/link"
+"use client"
+
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { 
@@ -11,6 +13,29 @@ import {
 } from "lucide-react"
 
 export default function LoginPage() {
+
+  // 🚀 Google 登入並同時索取 行事曆 與 Gmail 權限
+  const handleGoogleLogin = async (e: any) => {
+    e.preventDefault()
+    const currentUrl = typeof window !== 'undefined' ? window.location.origin : 'https://goal-flow-lobo.vercel.app'
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${currentUrl}/dashboard`,
+        queryParams: {
+          access_type: 'offline', 
+          prompt: 'consent',     
+          scope: 'openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.send'
+        }
+      }
+    })
+
+    if (error) {
+      console.error("Google login failed:", error.message)
+    }
+  }
+
   return (
     <div className="relative min-h-screen bg-background">
       {/* Background */}
@@ -23,14 +48,14 @@ export default function LoginPage() {
         {/* Left Panel - Login Card */}
         <div className="flex flex-1 items-center justify-center p-6 lg:p-12">
           <div className="w-full max-w-md">
-            {/* Back Link */}
-            <Link 
+            {/* Back Link - 🎯 改用正宗 <a> 標籤，徹底解決換頁卡死 Bug */}
+            <a 
               href="/" 
               className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to home
-            </Link>
+            </a>
 
             {/* Login Card */}
             <Card className="border-border/40 bg-card/60 backdrop-blur-xl">
@@ -48,6 +73,7 @@ export default function LoginPage() {
 
                 {/* Google Sign In Button */}
                 <Button 
+                  onClick={handleGoogleLogin}
                   size="lg" 
                   className="h-12 w-full gap-3 bg-gradient-to-r from-primary to-accent text-base text-primary-foreground hover:opacity-90"
                 >
@@ -63,9 +89,9 @@ export default function LoginPage() {
                 {/* Helper Text */}
                 <p className="mt-6 text-center text-sm text-muted-foreground">
                   By continuing, you agree to our{" "}
-                  <Link href="#" className="text-primary hover:underline">Terms of Service</Link>
+                  <a href="#" className="text-primary hover:underline">Terms of Service</a>
                   {" "}and{" "}
-                  <Link href="#" className="text-primary hover:underline">Privacy Policy</Link>
+                  <a href="#" className="text-primary hover:underline">Privacy Policy</a>
                 </p>
 
                 {/* Feature Badges */}
@@ -91,9 +117,9 @@ export default function LoginPage() {
             {/* Demo Link */}
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Just exploring?{" "}
-              <Link href="/dashboard" className="text-primary hover:underline">
+              <a href="/dashboard" className="text-primary hover:underline">
                 View the demo
-              </Link>
+              </a>
             </p>
           </div>
         </div>
@@ -109,15 +135,14 @@ export default function LoginPage() {
   )
 }
 
+
 function PreviewCard() {
   return (
     <div className="relative">
-      {/* Glow effect */}
       <div className="absolute -inset-4 rounded-2xl bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 blur-2xl" />
       
       <Card className="relative border-border/40 bg-card/80 backdrop-blur-sm">
         <CardContent className="p-6">
-          {/* Header */}
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="font-semibold">Dashboard</h3>
@@ -126,7 +151,6 @@ function PreviewCard() {
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-accent" />
           </div>
 
-          {/* Energy Bar */}
           <div className="mb-6 rounded-xl border border-border/40 bg-muted/30 p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-medium">Daily Energy</span>
@@ -138,7 +162,6 @@ function PreviewCard() {
             </div>
           </div>
 
-          {/* Goals Preview */}
           <div className="mb-6">
             <h4 className="mb-3 text-sm font-medium">Active Goals</h4>
             <div className="flex flex-col gap-2">
@@ -162,11 +185,10 @@ function PreviewCard() {
             </div>
           </div>
 
-          {/* AI Coach Preview */}
           <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Brain className="h-5 w-5 text-accent" />
-              <span className="text-sm font-medium">AI Coach</span>
+              <span className="font-medium">AI Coach</span>
               <span className="ml-auto rounded bg-accent/20 px-1.5 py-0.5 text-xs text-accent">Online</span>
             </div>
             <p className="text-sm text-muted-foreground">
