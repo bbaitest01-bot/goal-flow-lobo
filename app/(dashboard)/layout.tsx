@@ -51,7 +51,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setIsLoading(true);
 
     try {
-      // 🚨 這裡填入你 N8N 的 TEST Webhook URL
+      // 🌟 終極修正法：在函數被執行的當下才精準載入，徹底避開載入順序與時間差造成的未定義錯誤
+      const { supabase } = require("@/lib/supabase");
+
+      // 🚀 獲取目前真正登入的使用者身分證明
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // 如果獲取失敗或未登入，給予預設值，否則動態帶入真實使用者的 UUID
+      const currentUserId = user ? user.id : 'dobby-test';
+
+      // 🚨 妳 N8N 的 TEST Webhook URL
       const N8N_WEBHOOK_URL = 'https://n8n.goalflow.ccwu.cc/webhook-test/9dd7f055-07d0-4f3e-a572-f9ee62b60b31';
 
       const response = await fetch(N8N_WEBHOOK_URL, {
@@ -59,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           chatInput: userMessage,
-          user_id: 'dobby-test' 
+          user_id: currentUserId // 🌟 動態塞入真實使用者的 UUID
         })
       });
 
@@ -104,7 +113,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           </div>
           
-          {/* 左側選單：隱藏原本醜醜的滾動條，換成細緻版 */}
           <div className="flex-1 overflow-y-auto px-3 py-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30">
             <nav className="space-y-1">
               {sidebarItems.map((item) => (
@@ -152,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1 overflow-hidden">
           
-          {/* 中間頁面內容：套用超美圓角、半透明滾輪軸 */}
+          {/* 中間頁面內容 */}
           <main className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-background via-background to-primary/5 relative [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40">
             {children}
           </main>
@@ -172,7 +180,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </div>
 
-            {/* 教練對話區域：套用細版隱形滾輪軸 */}
+            {/* 教練對話區域 */}
             <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30">
               {messages.map((msg, i) => (
                 <div key={i} className={cn(

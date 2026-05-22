@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,30 +10,88 @@ import { ArrowRight, Plus } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
-const initialTasks = [
-  { id: 1, title: "Write introduction chapter", rpe: 7, done: true, goal: "Graduation Project" },
-  { id: 2, title: "Review literature notes", rpe: 4, done: false, goal: "Graduation Project" },
-  { id: 3, title: "Complete React hooks tutorial", rpe: 5, done: false, goal: "Learn React Advanced" },
-  { id: 4, title: "Update project timeline", rpe: 3, done: false, goal: "Graduation Project" },
-]
+interface Task {
+  id: string | number
+  title: string
+  rpe: number
+  done: boolean
+  goal: string
+}
 
 export function TodaysTasks() {
-  const [tasks, setTasks] = useState(initialTasks)
+  const [tasks, setTasks] = useState<Task[]>([])
   const [newTaskTitle, setNewTaskTitle] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
+  // --- 1. 撈取當前登入者的今日任務 ---
+  const fetchTasks = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id) // 🌟 嚴格隔離：只撈目前使用者的任務
+    
+
+    if (error) {
+      console.error("任務撈取失敗:", error.message)
+    } else if (data) {
+      const formattedTasks = data.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        rpe: t.rpe_score || 5,
+        done: t.status === "completed", 
+        goal: "Graduation Project",    
+      }))
+      setTasks(formattedTasks)
+    }
+  }
+
+  useEffect(() => {
+    fetchTasks()
+  }, [])
+
+  // --- 🌟 2. 新增：點擊打勾即時連動 Supabase 狀態 ---
+  const handleToggleTodo = async (taskId: string | number, currentStatus: boolean) => {
+    // 立即優化前端 UI 體驗（不卡頓）
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: !currentStatus } : t))
+
+    const nextStatus = !currentStatus ? "completed" : "todo"
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({ status: nextStatus })
+      .eq("id", taskId)
+
+    if (error) {
+      console.error("更新任務狀態失敗:", error.message)
+      // 失敗時倒滾回來
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: currentStatus } : t))
+    }
+  }
+
+  // --- 3. 動態綁定帳號手動新增任務 ---
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
 
     setIsLoading(true)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      alert("請先登入系統！")
+      setIsLoading(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from("tasks")
       .insert([
         {
           title: newTaskTitle.trim(),
-          user_id: "12543ace-5b0e-4e98-bba0-450da3ba5cc9",
-          goal_id: "d8865988-327f-47f2-a277-e41ba6dc7eb2",
+          user_id: user.id, // 🌟 自動綁定目前登入帳號
+          goal_id: "d8865988-327f-47f2-a277-e41ba6dc7eb2", 
           rpe_score: 5,
           energy_cost: 20,
           status: "todo",
@@ -46,16 +104,8 @@ export function TodaysTasks() {
 
     if (error) {
       alert("新增失敗：" + error.message)
-    } else {
-      // 新增到本地列表顯示
-      const newTask = {
-        id: Date.now(),
-        title: newTaskTitle.trim(),
-        rpe: 5,
-        done: false,
-        goal: "New Task",
-      }
-      setTasks([newTask, ...tasks])
+    } else if (data) {
+      fetchTasks()
       setNewTaskTitle("")
     }
   }
@@ -100,26 +150,34 @@ export function TodaysTasks() {
         </div>
 
         {/* Task List */}
-        {tasks.map((task) => (
-          <div 
-            key={task.id} 
-            className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
-          >
-            <Checkbox checked={task.done} />
-            <div className="flex-1">
-              <p className={task.done ? "line-through text-muted-foreground" : ""}>
-                {task.title}
-              </p>
-              <p className="text-xs text-muted-foreground">{task.goal}</p>
-            </div>
-            <Badge 
-              variant="secondary" 
-              className={`text-xs ${task.rpe >= 7 ? 'bg-red-500/20 text-red-400' : task.rpe >= 5 ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}
+        {tasks.length === 0 ? (
+          <p className="text-muted-foreground text-sm py-4 text-center">今日尚無安排任務</p>
+        ) : (
+          tasks.map((task) => (
+            <div 
+              key={task.id} 
+              className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
             >
-              RPE {task.rpe}
-            </Badge>
-          </div>
-        ))}
+              {/* 🌟 核心修正：將打勾狀態與點擊事件精準綁定 */}
+              <Checkbox 
+                checked={task.done} 
+                onCheckedChange={() => handleToggleTodo(task.id, task.done)}
+              />
+              <div className="flex-1">
+                <p className={task.done ? "line-through text-muted-foreground" : ""}>
+                  {task.title}
+                </p>
+                <p className="text-xs text-muted-foreground">{task.goal}</p>
+              </div>
+              <Badge 
+                variant="secondary" 
+                className={`text-xs ${task.rpe >= 7 ? 'bg-red-500/20 text-red-400' : task.rpe >= 5 ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}
+              >
+                RPE {task.rpe}
+              </Badge>
+            </div>
+          ))
+        )}
       </CardContent>
     </Card>
   )
