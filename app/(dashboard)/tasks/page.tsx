@@ -51,12 +51,11 @@ export default function TasksPage() {
         ...t,
         id: t.id,
         title: t.title,
-        done: t.is_completed, // 🌟 修正：直接讀取 is_completed (布林值)
+        done: t.is_completed === true, // 🌟 規格化：直接與資料庫布林值掛鉤
         rpe: t.rpe_score || 5,
         energyCost: t.energy_cost || 0, 
-        dueDate: t.target_date || "No Date",
-        goalTitle: "GoalFlow Project", 
-        status: t.is_completed ? "done" : "todo" // 🌟 修正：根據布林值給予 todo 或 done
+        dueDate: t.target_date || "無截止日",
+        goalTitle: "GoalFlow Project"
       }))
       setTasks(formattedTasks)
     }
@@ -89,24 +88,20 @@ export default function TasksPage() {
     }
   }
 
-  // 🌟 修正後的打勾功能：精準對齊資料庫真實的 is_completed 欄位
+  // 3. 打勾功能：精準同步資料庫真實的 is_completed 欄位
   const handleToggleTask = async (id: any, currentDone: boolean) => {
     // 搶先更新前端狀態（讓使用者操作不卡頓）
-    setTasks(tasks.map(t => 
-      t.id === id ? { ...t, done: !currentDone, status: !currentDone ? "done" : "todo" } : t
-    ))
+    setTasks(tasks.map(t => t.id === id ? { ...t, done: !currentDone } : t))
 
     const { error } = await supabase
       .from("tasks")
-      .update({ is_completed: !currentDone }) // 🌟 這裡改成正確的 is_completed！
+      .update({ is_completed: !currentDone }) // 🌟 只修改確定存在的真實欄位
       .eq("id", id)
 
     if (error) {
       console.error("打勾同步失敗:", error.message)
       // 失敗時倒滾狀態回來
-      setTasks(tasks.map(t => 
-        t.id === id ? { ...t, done: currentDone, status: currentDone ? "done" : "todo" } : t
-      ))
+      setTasks(tasks.map(t => t.id === id ? { ...t, done: currentDone } : t))
     }
   }
 
@@ -136,16 +131,10 @@ export default function TasksPage() {
   })
 
   const getRpeBadgeColor = (rpe: number) => {
-    if (rpe >= 8) return "bg-red-500/20 text-red-400"
-    if (rpe >= 6) return "bg-amber-500/20 text-amber-400"
-    if (rpe >= 4) return "bg-yellow-500/20 text-yellow-400"
+    if (rpe >= 7) return "bg-red-500/20 text-red-400"
+    if (rpe >= 5) return "bg-amber-500/20 text-amber-400"
+    if (rpe >= 3) return "bg-yellow-500/20 text-yellow-400"
     return "bg-green-500/20 text-green-400"
-  }
-
-  const getStatusBadge = (status: string) => {
-    return status === "done" 
-      ? <Badge className="bg-green-500/20 text-green-400">Done</Badge>
-      : <Badge className="bg-muted text-muted-foreground">To Do</Badge>
   }
 
   const completedCount = tasks.filter(t => t.done).length
@@ -205,7 +194,7 @@ export default function TasksPage() {
             placeholder="Search tasks..." 
             value={searchQuery} 
             onChange={(e) => setSearchQuery(e.target.value)} 
-            className="border-border/60 bg-muted/30 pl-9" 
+            className="border-border/60 bg-muted/30 p-9 pl-9" 
           />
         </div>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
@@ -222,7 +211,6 @@ export default function TasksPage() {
         <CardContent className="p-0">
           <div className="divide-y divide-border/40">
             {filteredTasks.length === 0 ? (
-              // 🌟 核心改動：如果 loading 還在跑，就先完全不著色、不跳出提示，保持優雅留白
               loading ? null : <p className="text-muted-foreground text-sm py-8 text-center">目前尚無符合條件的任務</p>
             ) : filteredTasks.map((task) => (
               <div key={task.id} className="group flex items-center gap-4 p-4 transition-colors hover:bg-muted/20">
@@ -231,7 +219,12 @@ export default function TasksPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className={`font-medium ${task.done ? "line-through text-muted-foreground" : ""}`}>{task.title}</p>
-                    {getStatusBadge(task.status)}
+                    {/* 🌟 規格化：直接根據真實的 task.done 狀態渲染 Badge 顏色，消滅虛擬的 status 字串 */}
+                    {task.done ? (
+                      <Badge className="bg-green-500/20 text-green-400">Done</Badge>
+                    ) : (
+                      <Badge className="bg-muted text-muted-foreground">To Do</Badge>
+                    )}
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                     <Target className="h-3 w-3" /> GoalFlow Project
