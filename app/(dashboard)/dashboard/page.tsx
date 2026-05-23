@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react" // 🌟 引入 hook
-import { supabase } from "@/lib/supabase"  // 🌟 引入 supabase
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -44,12 +44,15 @@ const weeklyActivity = [
 ]
 
 export default function DashboardPage() {
-  const [activeGoals, setActiveGoals] = useState<Goal[]>([]) // 🌟 改用 state 管理目標
+  const [activeGoals, setActiveGoals] = useState<Goal[]>([]) 
+  // 🌟 新增：管理任務統計的狀態（今日任務進度）
+  const [taskStats, setTaskStats] = useState({ completed: 0, total: 0 })
+
   const energyUsed = 55
   const totalEnergy = 100
   const remainingEnergy = totalEnergy - energyUsed
 
-  // 🌟 連線撈取真正屬於目前登入者的目標
+  // 1. 連線撈取真正屬於目前登入者的目標
   const fetchGoals = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -66,7 +69,7 @@ export default function DashboardPage() {
       const formattedGoals = data.map((g: any) => ({
         id: g.id,
         title: g.title || "未命名目標",
-        progress: g.progress_percent || 0, // 對齊資料庫裡的進度欄位，若名稱不同可再微調
+        progress: g.progress_percent || 0,
         deadline: g.target_date || "無截止日",
         tasks: 10,
         completedTasks: 4
@@ -75,8 +78,30 @@ export default function DashboardPage() {
     }
   }
 
+ const fetchTaskStats = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("is_completed") // 🔑 修正：只撈取確定存在的 is_completed 欄位
+      .eq("user_id", user.id)
+
+    if (error) {
+      console.error("統計任務失敗:", error.message)
+    } else if (data) {
+      const total = data.length
+      // 🔑 修正：百分之百只根據資料庫的 TRUE / FALSE 來篩選完成數量
+      const completed = data.filter((t: any) => t.is_completed === true).length
+      
+      setTaskStats({ completed, total })
+    }
+  }
+
+  // 3. 🌟 【關鍵修正】嚴格遵守 React 鐵律，useEffect 獨立放在最外層
   useEffect(() => {
     fetchGoals()
+    fetchTaskStats()
   }, [])
 
   return (
@@ -127,11 +152,12 @@ export default function DashboardPage() {
           trend="+2 from last week"
           trendUp
         />
+        {/* 🎯 核心修正：將原本寫死的 "23" 改為動態即時同步的任務進度 */}
         <StatCard 
           icon={CheckCircle2}
-          label="Tasks This Week"
-          value="23"
-          trend="5 more than usual"
+          label="Today's Tasks Progress"
+          value={`${taskStats.completed} / ${taskStats.total}`}
+          trend="即時同步"
           trendUp
         />
         <StatCard 
@@ -192,7 +218,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Today's Tasks */}
+        {/* Today's Tasks 元件 */}
         <TodaysTasks />
 
         {/* Today's Chores */}
@@ -212,7 +238,7 @@ export default function DashboardPage() {
                 key={chore.id} 
                 className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
               >
-                <Checkbox checked={chore.done} />
+                <Checkbox checked={chore.done} disabled />
                 <p className={`flex-1 ${chore.done ? "line-through text-muted-foreground" : ""}`}>
                   {chore.title}
                 </p>
