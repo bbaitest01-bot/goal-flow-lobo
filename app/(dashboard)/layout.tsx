@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const currentUserId = user ? user.id : 'dobby-test';
 
       // 🚨 妳 N8N 的 TEST Webhook URL
-      const N8N_WEBHOOK_URL = 'https://n8n.goalflow.ccwu.cc/webhook-test/9dd7f055-07d0-4f3e-a572-f9ee62b60b31';
+      const N8N_WEBHOOK_URL = 'https://n8n.goalflow.ccwu.cc/webhook/9dd7f055-07d0-4f3e-a572-f9ee62b60b31';
 
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
