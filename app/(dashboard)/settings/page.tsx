@@ -1,5 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase" // 🎯 請確保這裡的路徑與妳們專案中存放 supabase 的地方一致（如果是 utils/supabase 請自行微調）
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +28,43 @@ import {
 } from "lucide-react"
 
 export default function SettingsPage() {
+  const router = useRouter()
+  // 建立動態狀態來儲存登入者的資料
+  const [userData, setUserData] = useState({
+    name: "Loading...",
+    email: "Loading...",
+    avatar: ""
+  })
+
+  // 1. 網頁載入時，自動去向 Supabase 撈取現有的 Google 帳號資訊
+  useEffect(() => {
+    async function fetchUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserData({
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || "GoalFlow 使用者",
+          email: user.email || "",
+          avatar: user.user_metadata?.avatar_url || ""
+        })
+      } else {
+        // 如果發現根本沒登入，安全退回登入頁
+        router.push("/")
+      }
+    }
+    fetchUser()
+  }, [router])
+
+  // 2. 核心登出邏輯：銷毀 Cookie 鑰匙並閃電回首頁
+  async function handleSignOut() {
+    try {
+      await supabase.auth.signOut()
+      // 使用物理轉址清理所有記憶體快取，確保首頁重新整理狀態
+      window.location.href = "/"
+    } catch (error) {
+      console.error("登出發生錯誤:", error)
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       {/* Header */}
@@ -45,28 +85,28 @@ export default function SettingsPage() {
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage src="/avatar.png" />
+              {/* 🎯 動態載入 Google 大頭貼 */}
+              <AvatarImage src={userData.avatar} />
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl text-primary-foreground">
-                JD
+                {userData.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <Button variant="outline" size="sm">Change Avatar</Button>
+              <p className="text-sm text-muted-foreground">帳戶頭像與 Google 帳號同步</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium">Name</label>
-              <Input defaultValue="John Doe" className="border-border/60 bg-muted/30" />
+              {/* 🎯 動態載入 Google 顯示名稱 */}
+              <Input value={userData.name} readOnly className="border-border/60 bg-muted/30" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Email</label>
-              <Input defaultValue="john@example.com" disabled className="border-border/60 bg-muted/30" />
+              {/* 🎯 動態載入 Google 電子郵件 */}
+              <Input value={userData.email} disabled className="border-border/60 bg-muted/30" />
             </div>
           </div>
-          <Button className="w-fit bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90">
-            Save Changes
-          </Button>
         </CardContent>
       </Card>
 
@@ -257,7 +297,13 @@ export default function SettingsPage() {
               <p className="font-medium text-destructive">Sign Out</p>
               <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:bg-destructive/10">
+            {/* 🎯 綁定點擊事件 onClick，按下去立刻執行 handleSignOut */}
+            <Button 
+              onClick={handleSignOut} 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 text-destructive hover:bg-destructive/10"
+            >
               <LogOut className="h-4 w-4" />
               Sign Out
             </Button>
