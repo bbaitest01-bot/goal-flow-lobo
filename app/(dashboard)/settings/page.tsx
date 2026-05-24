@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase" // 🎯 請確保這裡的路徑與妳們專案中存放 supabase 的地方一致（如果是 utils/supabase 請自行微調）
+import { supabase } from "@/lib/supabase" 
+import { useTheme } from "next-themes" // 🌟 新增：引入 next-themes 核心套件
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +30,11 @@ import {
 
 export default function SettingsPage() {
   const router = useRouter()
+  
+  // 🌟 新增：控制全站黑白主題的核心機制 (theme 可以是 "dark", "light", "system")
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
   // 建立動態狀態來儲存登入者的資料
   const [userData, setUserData] = useState({
     name: "Loading...",
@@ -38,6 +44,7 @@ export default function SettingsPage() {
 
   // 1. 網頁載入時，自動去向 Supabase 撈取現有的 Google 帳號資訊
   useEffect(() => {
+    setMounted(true) // 確保在客戶端掛載完成，預防 Next.js 伺服器端渲染混亂
     async function fetchUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -47,18 +54,16 @@ export default function SettingsPage() {
           avatar: user.user_metadata?.avatar_url || ""
         })
       } else {
-        // 如果發現根本沒登入，安全退回登入頁
         router.push("/")
       }
     }
     fetchUser()
   }, [router])
 
-  // 2. 核心登出邏輯：銷毀 Cookie 鑰匙並閃電回首頁
+  // 2. 核心登出邏輯
   async function handleSignOut() {
     try {
       await supabase.auth.signOut()
-      // 使用物理轉址清理所有記憶體快取，確保首頁重新整理狀態
       window.location.href = "/"
     } catch (error) {
       console.error("登出發生錯誤:", error)
@@ -85,7 +90,6 @@ export default function SettingsPage() {
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-20 w-20">
-              {/* 🎯 動態載入 Google 大頭貼 */}
               <AvatarImage src={userData.avatar} />
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl text-primary-foreground">
                 {userData.name.substring(0, 2).toUpperCase()}
@@ -98,12 +102,10 @@ export default function SettingsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium">Name</label>
-              {/* 🎯 動態載入 Google 顯示名稱 */}
               <Input value={userData.name} readOnly className="border-border/60 bg-muted/30" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Email</label>
-              {/* 🎯 動態載入 Google 電子郵件 */}
               <Input value={userData.email} disabled className="border-border/60 bg-muted/30" />
             </div>
           </div>
@@ -253,16 +255,20 @@ export default function SettingsPage() {
               <p className="font-medium">Theme</p>
               <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
             </div>
-            <Select defaultValue="dark">
-              <SelectTrigger className="w-32 border-border/60 bg-muted/30">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border/60 bg-card">
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
+            
+            {/* 🎯 核心改動：將 Select 綁定 next-themes 的 theme 狀態與 setTheme 變更事件 */}
+            {mounted && (
+              <Select value={theme} onValueChange={(value) => setTheme(value)}>
+                <SelectTrigger className="w-32 border-border/60 bg-muted/30">
+                  <SelectValue placeholder="選擇主題" />
+                </SelectTrigger>
+                <SelectContent className="border-border/60 bg-card">
+                  <SelectItem value="dark">Dark</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="system">System</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -297,7 +303,6 @@ export default function SettingsPage() {
               <p className="font-medium text-destructive">Sign Out</p>
               <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            {/* 🎯 綁定點擊事件 onClick，按下去立刻執行 handleSignOut */}
             <Button 
               onClick={handleSignOut} 
               variant="outline" 
