@@ -3,10 +3,47 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* GoalFlow Dark Theme - Purple/Blue/Pink accents */
+/* ☀️ 亮色模式 (Light Theme) - 白底黑字、精緻紫藍粉色調 */
 :root {
-  --background: oklch(0.12 0.02 280);
-  --foreground: oklch(0.98 0.01 280);
+  --background: oklch(0.98 0.01 280);      /* 🎯 亮色底：超乾淨清爽白底 */
+  --foreground: oklch(0.16 0.025 280);     /* 🎯 亮色字：深色文字閱讀舒適 */
+  --card: oklch(1 0 0);                    /* 純白卡片 */
+  --card-foreground: oklch(0.16 0.025 280);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.025 280);
+  --primary: oklch(0.55 0.22 290);         /* 亮色系主色 */
+  --primary-foreground: oklch(0.98 0.01 280);
+  --secondary: oklch(0.95 0.01 280);
+  --secondary-foreground: oklch(0.16 0.025 280);
+  --muted: oklch(0.95 0.01 280);
+  --muted-foreground: oklch(0.45 0.02 280);
+  --accent: oklch(0.60 0.20 320);          /* 亮色焦點色 */
+  --accent-foreground: oklch(0.98 0.01 280);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 280);
+  --border: oklch(0.88 0.01 280);          /* 淡淡的淺色邊框 */
+  --input: oklch(0.88 0.01 280);
+  --ring: oklch(0.55 0.22 290);
+  --chart-1: oklch(0.55 0.22 290);
+  --chart-2: oklch(0.60 0.20 320);
+  --chart-3: oklch(0.55 0.20 250);
+  --chart-4: oklch(0.70 0.18 200);
+  --chart-5: oklch(0.65 0.24 340);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.97 0.01 280);         /* 淺色側邊欄 */
+  --sidebar-foreground: oklch(0.16 0.025 280);
+  --sidebar-primary: oklch(0.55 0.22 290);
+  --sidebar-primary-foreground: oklch(0.98 0.01 280);
+  --sidebar-accent: oklch(0.93 0.01 280);
+  --sidebar-accent-foreground: oklch(0.16 0.025 280);
+  --sidebar-border: oklch(0.88 0.01 280);
+  --sidebar-ring: oklch(0.55 0.22 290);
+}
+
+/* 🌙 暗色模式 (Dark Theme) - 100% 還原妳們原本超酷的 GoalFlow 經典深色調 */
+.dark {
+  --background: oklch(0.12 0.02 280);      /* 極致暗黑底 */
+  --foreground: oklch(0.98 0.01 280);      /* 螢光白字 */
   --card: oklch(0.16 0.025 280);
   --card-foreground: oklch(0.98 0.01 280);
   --popover: oklch(0.14 0.02 280);
@@ -29,7 +66,6 @@
   --chart-3: oklch(0.55 0.20 250);
   --chart-4: oklch(0.70 0.18 200);
   --chart-5: oklch(0.65 0.24 340);
-  --radius: 0.75rem;
   --sidebar: oklch(0.10 0.02 280);
   --sidebar-foreground: oklch(0.98 0.01 280);
   --sidebar-primary: oklch(0.65 0.25 290);
@@ -89,23 +125,20 @@
     @apply bg-background text-foreground;
   }
 }
-/* 自訂深色滑軌樣式 */
+
+/* 自訂滑軌樣式（自動適應黑白主題） */
 .custom-scrollbar::-webkit-scrollbar {
   height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(39, 39, 42, 0.4); /* 深色背景 */
+  background: var(--muted);
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #52525b; /* 滑桿顏色 */
+  background-color: var(--border);
   border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: #71717a;
 }
 
 /* 讓標籤不要被擠壓 */
