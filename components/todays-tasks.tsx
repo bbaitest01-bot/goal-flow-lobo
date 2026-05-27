@@ -32,18 +32,24 @@ export function TodaysTasks() {
       .from("tasks")
       .select("*")
       .eq("user_id", user.id) // 🌟 嚴格隔離：只撈目前使用者的任務
-    
+
 
     if (error) {
       console.error("任務撈取失敗:", error.message)
     } else if (data) {
-      const formattedTasks = data.map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        rpe: t.rpe_score || 5,
-        done: t.status === "completed", 
-        goal: "Graduation Project",    
-      }))
+      // 找到 fetchTasks 裡面的 data.map，整段改成這樣：
+      const formattedTasks = data.map((t: any) => {
+        // 🎯 只要資料庫是 "completed" 或 "Done" 或 is_completed 欄位為 true，都算完成！
+        const isTaskDone = t.status === "completed" || t.status === "Done" || t.is_completed === true;
+
+        return {
+          id: t.id,
+          title: t.title,
+          rpe: t.rpe_score || 5,
+          done: isTaskDone,
+          goal: "Graduation Project",
+        }
+      })
       setTasks(formattedTasks)
     }
   }
@@ -53,21 +59,25 @@ export function TodaysTasks() {
   }, [])
 
   // --- 🌟 2. 新增：點擊打勾即時連動 Supabase 狀態 ---
-  const handleToggleTodo = async (taskId: string | number, currentStatus: boolean) => {
-    // 立即優化前端 UI 體驗（不卡頓）
+ const handleToggleTodo = async (taskId: string | number, currentStatus: boolean) => {
+    // 立即優化前端 UI 體驗
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: !currentStatus } : t))
 
-    const nextStatus = !currentStatus ? "completed" : "todo"
+    // 🎯 核心修正：直接把目前的勾選狀態取反 (true 變 false，false 變 true)
+    const nextCompletedStatus = !currentStatus 
 
     const { error } = await supabase
       .from("tasks")
-      .update({ status: nextStatus })
+      .update({ is_completed: nextCompletedStatus }) // 🔑 對齊資料庫：修改正確的欄位名稱！
       .eq("id", taskId)
 
     if (error) {
       console.error("更新任務狀態失敗:", error.message)
       // 失敗時倒滾回來
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: currentStatus } : t))
+    } else {
+      // 🚀 【神級優化】如果更新成功，強制刷一下大首頁的數據，讓上方的卡片（1/2）同步跳轉！
+      window.location.reload()
     }
   }
 
@@ -78,7 +88,7 @@ export function TodaysTasks() {
     setIsLoading(true)
 
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
       alert("請先登入系統！")
       setIsLoading(false)
@@ -91,7 +101,7 @@ export function TodaysTasks() {
         {
           title: newTaskTitle.trim(),
           user_id: user.id, // 🌟 自動綁定目前登入帳號
-          goal_id: "d8865988-327f-47f2-a277-e41ba6dc7eb2", 
+          goal_id: "d8865988-327f-47f2-a277-e41ba6dc7eb2",
           rpe_score: 5,
           energy_cost: 20,
           status: "todo",
@@ -138,8 +148,8 @@ export function TodaysTasks() {
             disabled={isLoading}
             className="flex-1"
           />
-          <Button 
-            onClick={handleAddTask} 
+          <Button
+            onClick={handleAddTask}
             disabled={isLoading || !newTaskTitle.trim()}
             size="sm"
             className="gap-1"
@@ -154,13 +164,13 @@ export function TodaysTasks() {
           <p className="text-muted-foreground text-sm py-4 text-center">今日尚無安排任務</p>
         ) : (
           tasks.map((task) => (
-            <div 
-              key={task.id} 
+            <div
+              key={task.id}
               className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
             >
               {/* 🌟 核心修正：將打勾狀態與點擊事件精準綁定 */}
-              <Checkbox 
-                checked={task.done} 
+              <Checkbox
+                checked={task.done}
                 onCheckedChange={() => handleToggleTodo(task.id, task.done)}
               />
               <div className="flex-1">
@@ -169,8 +179,8 @@ export function TodaysTasks() {
                 </p>
                 <p className="text-xs text-muted-foreground">{task.goal}</p>
               </div>
-              <Badge 
-                variant="secondary" 
+              <Badge
+                variant="secondary"
                 className={`text-xs ${task.rpe >= 7 ? 'bg-red-500/20 text-red-400' : task.rpe >= 5 ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}
               >
                 RPE {task.rpe}

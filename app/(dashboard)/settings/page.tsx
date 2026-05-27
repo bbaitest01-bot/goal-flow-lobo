@@ -1,5 +1,9 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase" 
+import { useTheme } from "next-themes" // 🌟 新增：引入 next-themes 核心套件
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +29,47 @@ import {
 } from "lucide-react"
 
 export default function SettingsPage() {
+  const router = useRouter()
+  
+  // 🌟 新增：控制全站黑白主題的核心機制 (theme 可以是 "dark", "light", "system")
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // 建立動態狀態來儲存登入者的資料
+  const [userData, setUserData] = useState({
+    name: "Loading...",
+    email: "Loading...",
+    avatar: ""
+  })
+
+  // 1. 網頁載入時，自動去向 Supabase 撈取現有的 Google 帳號資訊
+  useEffect(() => {
+    setMounted(true) // 確保在客戶端掛載完成，預防 Next.js 伺服器端渲染混亂
+    async function fetchUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserData({
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || "GoalFlow 使用者",
+          email: user.email || "",
+          avatar: user.user_metadata?.avatar_url || ""
+        })
+      } else {
+        router.push("/")
+      }
+    }
+    fetchUser()
+  }, [router])
+
+  // 2. 核心登出邏輯
+  async function handleSignOut() {
+    try {
+      await supabase.auth.signOut()
+      window.location.href = "/"
+    } catch (error) {
+      console.error("登出發生錯誤:", error)
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       {/* Header */}
@@ -45,28 +90,25 @@ export default function SettingsPage() {
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
             <Avatar className="h-20 w-20">
-              <AvatarImage src="/avatar.png" />
+              <AvatarImage src={userData.avatar} />
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl text-primary-foreground">
-                JD
+                {userData.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <Button variant="outline" size="sm">Change Avatar</Button>
+              <p className="text-sm text-muted-foreground">帳戶頭像與 Google 帳號同步</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium">Name</label>
-              <Input defaultValue="John Doe" className="border-border/60 bg-muted/30" />
+              <Input value={userData.name} readOnly className="border-border/60 bg-muted/30" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Email</label>
-              <Input defaultValue="john@example.com" disabled className="border-border/60 bg-muted/30" />
+              <Input value={userData.email} disabled className="border-border/60 bg-muted/30" />
             </div>
           </div>
-          <Button className="w-fit bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90">
-            Save Changes
-          </Button>
         </CardContent>
       </Card>
 
@@ -213,16 +255,20 @@ export default function SettingsPage() {
               <p className="font-medium">Theme</p>
               <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
             </div>
-            <Select defaultValue="dark">
-              <SelectTrigger className="w-32 border-border/60 bg-muted/30">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border/60 bg-card">
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
+            
+            {/* 🎯 核心改動：將 Select 綁定 next-themes 的 theme 狀態與 setTheme 變更事件 */}
+            {mounted && (
+              <Select value={theme} onValueChange={(value) => setTheme(value)}>
+                <SelectTrigger className="w-32 border-border/60 bg-muted/30">
+                  <SelectValue placeholder="選擇主題" />
+                </SelectTrigger>
+                <SelectContent className="border-border/60 bg-card">
+                  <SelectItem value="dark">Dark</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="system">System</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -257,7 +303,12 @@ export default function SettingsPage() {
               <p className="font-medium text-destructive">Sign Out</p>
               <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:bg-destructive/10">
+            <Button 
+              onClick={handleSignOut} 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 text-destructive hover:bg-destructive/10"
+            >
               <LogOut className="h-4 w-4" />
               Sign Out
             </Button>
