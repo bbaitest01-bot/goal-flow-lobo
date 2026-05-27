@@ -21,10 +21,7 @@ import {
   Send,
   Trash2
 } from "lucide-react"
-import { useState, useEffect, useRef } from "react" // 🎯 已補上 useRef
-
-// 🎯 將 Supabase 的引用提到最外層，整個全域只初始化一次
-const { supabase } = require("@/lib/supabase");
+import { useState } from "react"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -33,53 +30,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [coachInput, setCoachInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
-  const [hasLoaded, setHasLoaded] = useState(false);
   const [messages, setMessages] = useState([
     { role: "coach", content: "您好！我是 GoalFlow 管家。今天打算浪費時間，還是要做點正事？說來聽聽。" }
   ]);
-
-  // ===================================================
-  // 🎯 核心補強：自動滾動到底部邏輯（隱形圖釘）
-  // ===================================================
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // 當訊息數量改變，或是教練進入「打字中...」狀態，都會平滑滾動到底部
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  // ===================================================
-  // 🏃‍♂️ 動作一：網頁一打開，立刻去 Supabase 撈歷史訊息（已加入效能防護）
-  // ===================================================
-  useEffect(() => {
-    if (hasLoaded) return;
-
-    async function loadChatHistory() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return; 
-
-        const { data: logs, error } = await supabase
-          .from('chat_logs')
-          .select('role, content')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true }); 
-
-        if (error) throw error;
-
-        if (logs && logs.length > 0) {
-          setMessages(logs);
-        }
-        
-        setHasLoaded(true);
-      } catch (error) {
-        console.error("載入歷史對話失敗:", error);
-      }
-    }
-
-    loadChatHistory();
-  }, [hasLoaded]); 
 
   const toggleLanguage = () => {
     const currentLang = myI18n.language || 'en';
@@ -87,9 +40,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     myI18n.changeLanguage(newLang);
   };
 
-  // ===================================================
-  // 🏃‍♂️ 動作二：發送訊息改敲我們自己的 Next.js 全能內部通道
-  // ===================================================
   const handleSendMessage = async () => {
     if (!coachInput.trim() || isLoading) return;
 
@@ -101,24 +51,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      // 🌟 終極修正法：在函數被執行的當下才精準載入，徹底避開載入順序與時間差造成的未定義錯誤
+      const { supabase } = require("@/lib/supabase");
+
+      // 🚀 獲取目前真正登入的使用者身分證明
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // 如果獲取失敗或未登入，給予預設值，否則動態帶入真實使用者的 UUID
+      const currentUserId = user ? user.id : 'dobby-test';
+
+      // 🚨 妳 N8N 的 TEST Webhook URL
+      const N8N_WEBHOOK_URL = 'https://n8n.goalflow.ccwu.cc/webhook/9dd7f055-07d0-4f3e-a572-f9ee62b60b31';
+
+      const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage }) 
+        body: JSON.stringify({ 
+          chatInput: userMessage,
+          user_id: currentUserId // 🌟 動態塞入真實使用者的 UUID
+        })
       });
 
-      if (!response.ok) {
-        throw new Error('API 回傳錯誤');
-      }
-
       const data = await response.json();
-      const botReply = data.reply; 
-
+      const botReply = data.output || "已收到回應，但無法解析文字欄位。";
       setMessages([...updatedMessages, { role: "coach", content: botReply }]);
 
     } catch (error) {
-      console.error("Gemini 連線失敗:", error);
-      setMessages([...updatedMessages, { role: "coach", content: "❌ 嘖，教練現在大腦斷線了。快去檢查 Next.js 控制台！" }]);
+      console.error("N8N 連線失敗:", error);
+      setMessages([...updatedMessages, { role: "coach", content: "❌ 嘖，伺服器斷線了。快去檢查 N8N！" }]);
     } finally {
       setIsLoading(false);
     }
@@ -137,6 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden font-sans">
+      
       {/* 1. 左側選單 */}
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 w-64 border-r border-border/40 bg-card/80 backdrop-blur-2xl lg:static lg:block flex-shrink-0 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]",
@@ -236,9 +197,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <Brain className="h-3 w-3 text-accent" /> 教練打字中...
                 </div>
               )}
-
-              {/* 🎯 這裡就是隱形圖釘，它會強迫對話框自動保持在最底部 */}
-              <div ref={messagesEndRef} />
             </div>
 
             {/* 輸入框區域 */}
