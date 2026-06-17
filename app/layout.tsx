@@ -36,7 +36,28 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* ==================== 【沛涵 暑假終極修改：純原生字串注入，徹底免除閃爍】 ==================== */}
+        {/* 用 dangerouslySetInnerHTML 寫在原生 script 標籤上，並確保它放在 head 的最頂端 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var savedTheme = localStorage.getItem('theme');
+                  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `
+          }}
+        />
+        {/* ========================================================================================= */}
+      </head>
       <body className="font-sans antialiased">
         {children}
         <Analytics />
