@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react" // 引入狀態與偵測工具
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,33 +25,66 @@ import {
   LogOut
 } from "lucide-react"
 
-// ==================== 【沛涵 暑假新增第 1 部分：引入工具】 ====================
-import { useRouter } from "next/navigation" // 如果網頁噴錯，請把 "navigation" 改成 "next/navigation"
-import { supabase } from "@/lib/supabase" // ⚠️ 注意：如果路徑不對導致噴錯，可以根據組員建的檔案路徑調整（例如 '@/utils/supabase'）
-// =========================================================================
+// ==================== 【登出工具】 ====================
+import { useRouter } from "next/navigation" 
+import { supabase } from "@/lib/supabase" 
 
 export default function SettingsPage() {
-  // ==================== 【沛涵 暑假新增第 2 部分：登出邏輯】 ====================
   const router = useRouter();
+
+  // ==================== 【沛涵 暑假修改：主題狀態管理】 ====================
+  // 用來記錄目前選單要顯示什麼字 (dark/light/system)
+  const [currentTheme, setCurrentTheme] = useState<string>("dark")
+
+  // 網頁一打開時，自動偵測目前網頁真正的顏色，並同步選單的字
+  useEffect(() => {
+    const root = document.documentElement;
+    // 優先讀取之前存好的記憶，如果沒有，就看看有沒有 'dark' 這個 class
+    const savedTheme = localStorage.getItem("theme");
+    
+    if (savedTheme) {
+      setCurrentTheme(savedTheme);
+    } else {
+      const isDarkNow = root.classList.contains("dark");
+      setCurrentTheme(isDarkNow ? "dark" : "light");
+    }
+  }, []);
+
+  const handleThemeChange = (value: string) => {
+    const root = document.documentElement;
+    setCurrentTheme(value); // 讓選單點選的字立刻改變
+    
+    if (value === "dark") {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else if (value === "light") {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    } else if (value === "system") {
+      const systemIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (systemIsDark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+      localStorage.setItem("theme", "system");
+    }
+  };
+  // =========================================================================
 
   const handleSignOut = async () => {
     try {
-      // 呼叫 Supabase 的登出 API
       const { error } = await supabase.auth.signOut();
-      
       if (error) {
         console.error("登出發生錯誤：", error.message);
         alert("登出失敗，請再試一次！");
         return;
       }
-
-      // 登出成功後，強制導向登入頁面
       router.push("/login"); 
     } catch (err) {
       console.error("系統異常：", err);
     }
   };
-  // =========================================================================
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -240,8 +274,10 @@ export default function SettingsPage() {
               <p className="font-medium">Theme</p>
               <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
             </div>
-            <Select defaultValue="dark">
-              <SelectTrigger className="w-32 border-border/60 bg-muted/30">
+            
+            {/* ==================== 【沛涵 修改：綁定 currentTheme 狀態】 ==================== */}
+            <Select value={currentTheme} onValueChange={handleThemeChange}>
+              <SelectTrigger className="w-36 border-border/60 bg-muted/30">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="border-border/60 bg-card">
@@ -250,6 +286,8 @@ export default function SettingsPage() {
                 <SelectItem value="system">System</SelectItem>
               </SelectContent>
             </Select>
+            {/* ========================================================================= */}
+            
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -284,7 +322,6 @@ export default function SettingsPage() {
               <p className="font-medium text-destructive">Sign Out</p>
               <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            {/* ==================== 【沛涵 暑假修改第 3 部分：綁定點擊事件】 ==================== */}
             <Button 
               variant="outline" 
               size="sm" 
@@ -294,7 +331,6 @@ export default function SettingsPage() {
               <LogOut className="h-4 w-4" />
               Sign Out
             </Button>
-            {/* ========================================================================= */}
           </div>
         </CardContent>
       </Card>
