@@ -24,7 +24,34 @@ import {
   LogOut
 } from "lucide-react"
 
+// ==================== 【沛涵 暑假新增第 1 部分：引入工具】 ====================
+import { useRouter } from "next/navigation" // 如果網頁噴錯，請把 "navigation" 改成 "next/navigation"
+import { supabase } from "@/lib/supabase" // ⚠️ 注意：如果路徑不對導致噴錯，可以根據組員建的檔案路徑調整（例如 '@/utils/supabase'）
+// =========================================================================
+
 export default function SettingsPage() {
+  // ==================== 【沛涵 暑假新增第 2 部分：登出邏輯】 ====================
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      // 呼叫 Supabase 的登出 API
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error("登出發生錯誤：", error.message);
+        alert("登出失敗，請再試一次！");
+        return;
+      }
+
+      // 登出成功後，強制導向登入頁面
+      router.push("/login"); 
+    } catch (err) {
+      console.error("系統異常：", err);
+    }
+  };
+  // =========================================================================
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       {/* Header */}
@@ -257,10 +284,17 @@ export default function SettingsPage() {
               <p className="font-medium text-destructive">Sign Out</p>
               <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:bg-destructive/10">
+            {/* ==================== 【沛涵 暑假修改第 3 部分：綁定點擊事件】 ==================== */}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 text-destructive hover:bg-destructive/10"
+              onClick={handleSignOut}
+            >
               <LogOut className="h-4 w-4" />
               Sign Out
             </Button>
+            {/* ========================================================================= */}
           </div>
         </CardContent>
       </Card>
