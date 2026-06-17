@@ -1,12 +1,58 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* ==================== 【沛涵 修正：Tailwind v4 亮暗色核心宣告】 ==================== */
+/* 讓 Tailwind v4 知道我們要用 class 模式來切換主題 */
+@theme {
+  --animate-*: initial;
+}
 @custom-variant dark (&:is(.dark *));
+/* ========================================================================= */
 
-/* GoalFlow Dark Theme - Purple/Blue/Pink accents */
+/* GoalFlow Theme - 完美拆分亮暗色變數 */
 :root {
-  --background: oklch(0.12 0.02 280);
-  --foreground: oklch(0.98 0.01 280);
+  /* ☀️ 預設亮色模式 (純白與乾淨灰藍底) */
+  --background: oklch(1 0 0);           /* 純白背景 */
+  --foreground: oklch(0.12 0.02 280);    /* 深色文字 */
+  --card: oklch(0.98 0.01 280);
+  --card-foreground: oklch(0.12 0.02 280);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0.02 280);
+  --primary: oklch(0.60 0.25 290);       /* 紫色主調 */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0.02 280);
+  --secondary-foreground: oklch(0.12 0.02 280);
+  --muted: oklch(0.95 0.02 280);
+  --muted-foreground: oklch(0.40 0.02 280);
+  --accent: oklch(0.60 0.22 320);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.90 0.02 280);
+  --input: oklch(0.90 0.02 280);
+  --ring: oklch(0.60 0.25 290);
+  
+  --chart-1: oklch(0.65 0.25 290);
+  --chart-2: oklch(0.60 0.22 320);
+  --chart-3: oklch(0.55 0.20 250);
+  --chart-4: oklch(0.70 0.18 200);
+  --chart-5: oklch(0.65 0.24 340);
+  --radius: 0.75rem;
+
+  --sidebar: oklch(0.98 0.01 280);
+  --sidebar-foreground: oklch(0.12 0.02 280);
+  --sidebar-primary: oklch(0.60 0.25 290);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.02 280);
+  --sidebar-accent-foreground: oklch(0.12 0.02 280);
+  --sidebar-border: oklch(0.90 0.02 280);
+  --sidebar-ring: oklch(0.60 0.25 290);
+}
+
+.dark {
+  /* 🌙 當 class="dark" 啟用時，切換為原本的 GoalFlow 特色深色系 */
+  --background: oklch(0.12 0.02 280);    /* 深色背景 */
+  --foreground: oklch(0.98 0.01 280);    /* 淺色文字 */
   --card: oklch(0.16 0.025 280);
   --card-foreground: oklch(0.98 0.01 280);
   --popover: oklch(0.14 0.02 280);
@@ -24,12 +70,7 @@
   --border: oklch(0.28 0.04 280);
   --input: oklch(0.22 0.03 280);
   --ring: oklch(0.65 0.25 290);
-  --chart-1: oklch(0.65 0.25 290);
-  --chart-2: oklch(0.60 0.22 320);
-  --chart-3: oklch(0.55 0.20 250);
-  --chart-4: oklch(0.70 0.18 200);
-  --chart-5: oklch(0.65 0.24 340);
-  --radius: 0.75rem;
+
   --sidebar: oklch(0.10 0.02 280);
   --sidebar-foreground: oklch(0.98 0.01 280);
   --sidebar-primary: oklch(0.65 0.25 290);
@@ -89,18 +130,19 @@
     @apply bg-background text-foreground;
   }
 }
+
 /* 自訂深色滑軌樣式 */
 .custom-scrollbar::-webkit-scrollbar {
   height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(39, 39, 42, 0.4); /* 深色背景 */
+  background: rgba(39, 39, 42, 0.4);
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #52525b; /* 滑桿顏色 */
+  background-color: #52525b;
   border-radius: 10px;
 }
 
