@@ -21,7 +21,11 @@ import {
   Send,
   Trash2
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+// ==================== 【引入 Shadcn UI Avatar 元件】 ====================
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+// =========================================================================
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -33,6 +37,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [messages, setMessages] = useState([
     { role: "coach", content: "您好！我是 GoalFlow 管家。今天打算浪費時間，還是要做點正事？說來聽聽。" }
   ]);
+
+  // ==================== 【沛涵 暑假新增：右上角動態頭貼狀態與加載判定】 ====================
+  const [avatarInfo, setAvatarInfo] = useState<{ url: string; fallbackText: string }>({
+    url: "",
+    fallbackText: "GF"
+  });
+  const [isAvatarLoading, setIsAvatarLoading] = useState(true); // 控制微光呼吸的開關
+
+  useEffect(() => {
+    async function fetchUserAvatar() {
+      try {
+        const { supabase } = require("@/lib/supabase");
+        // 採用安全氣囊版的 getSession，防呆不噴錯
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session?.user) {
+          console.log("Layout 偵測到使用者未登入");
+          setIsAvatarLoading(false);
+          return;
+        }
+
+        const user = session.user;
+        const googleMetadata = user.user_metadata;
+        const name = googleMetadata?.full_name || user.email?.split('@')[0] || "GF";
+        
+        setAvatarInfo({
+          url: googleMetadata?.avatar_url || "",
+          fallbackText: name.substring(0, 2).toUpperCase()
+        });
+      } catch (err) {
+        console.error("Layout 獲取大頭貼失敗:", err);
+      } finally {
+        setIsAvatarLoading(false); // 撈完資料（無論成敗）關閉 loading 狀態
+      }
+    }
+    fetchUserAvatar();
+  }, []);
+  // ===================================================================================
 
   const toggleLanguage = () => {
     const currentLang = myI18n.language || 'en';
@@ -51,16 +93,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setIsLoading(true);
 
     try {
-      // 🌟 終極修正法：在函數被執行的當下才精準載入，徹底避開載入順序與時間差造成的未定義錯誤
       const { supabase } = require("@/lib/supabase");
-
-      // 🚀 獲取目前真正登入的使用者身分證明
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // 如果獲取失敗或未登入，給予預設值，否則動態帶入真實使用者的 UUID
       const currentUserId = user ? user.id : 'dobby-test';
-
-      // 🚨 妳 N8N 的 TEST Webhook URL
       const N8N_WEBHOOK_URL = 'https://n8n.goalflow.ccwu.cc/webhook/9dd7f055-07d0-4f3e-a572-f9ee62b60b31';
 
       const response = await fetch(N8N_WEBHOOK_URL, {
@@ -68,7 +103,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           chatInput: userMessage,
-          user_id: currentUserId // 🌟 動態塞入真實使用者的 UUID
+          user_id: currentUserId
         })
       });
 
@@ -154,7 +189,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
              <div className="relative cursor-pointer hover:bg-muted/50 p-2 rounded-full transition-colors">
                <Bell className="h-5 w-5 text-muted-foreground" />
              </div>
-             <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-accent shadow-sm ring-2 ring-background cursor-pointer" />
+             
+             {/* ==================== 【沛涵 修正：動態漸進式頭貼】 ==================== */}
+             {/* 利用 animate-pulse 做出微光加載效果，資料到了一秒絲滑淡入切換 */}
+             <Avatar className={cn(
+               "h-8 w-8 shadow-sm ring-2 ring-background cursor-pointer transition-all duration-300 hover:scale-105",
+               isAvatarLoading ? "animate-pulse bg-gradient-to-tr from-primary/40 to-accent/40" : ""
+             )}>
+               <AvatarImage 
+                 src={avatarInfo.url} 
+                 alt="User Avatar" 
+                 className={cn("transition-opacity duration-300", isAvatarLoading ? "opacity-0" : "opacity-100")} 
+               />
+               <AvatarFallback className="bg-gradient-to-tr from-primary to-accent text-[10px] font-bold text-primary-foreground">
+                 {avatarInfo.fallbackText}
+               </AvatarFallback>
+             </Avatar>
+             {/* ===================================================================== */}
           </div>
         </header>
 

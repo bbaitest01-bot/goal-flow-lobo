@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react" // 引入狀態與偵測工具
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,23 +25,18 @@ import {
   LogOut
 } from "lucide-react"
 
-// ==================== 【登出工具】 ====================
 import { useRouter } from "next/navigation" 
 import { supabase } from "@/lib/supabase" 
 
 export default function SettingsPage() {
   const router = useRouter();
 
-  // ==================== 【沛涵 暑假修改：主題狀態管理】 ====================
-  // 用來記錄目前選單要顯示什麼字 (dark/light/system)
+  // ==================== 【主題狀態管理】 ====================
   const [currentTheme, setCurrentTheme] = useState<string>("dark")
 
-  // 網頁一打開時，自動偵測目前網頁真正的顏色，並同步選單的字
   useEffect(() => {
     const root = document.documentElement;
-    // 優先讀取之前存好的記憶，如果沒有，就看看有沒有 'dark' 這個 class
     const savedTheme = localStorage.getItem("theme");
-    
     if (savedTheme) {
       setCurrentTheme(savedTheme);
     } else {
@@ -52,14 +47,13 @@ export default function SettingsPage() {
 
   const handleThemeChange = (value: string) => {
     const root = document.documentElement;
-    setCurrentTheme(value); // 讓選單點選的字立刻改變
+    setCurrentTheme(value);
+    localStorage.setItem("theme", value);
     
     if (value === "dark") {
       root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
     } else if (value === "light") {
       root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
     } else if (value === "system") {
       const systemIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       if (systemIsDark) {
@@ -67,10 +61,53 @@ export default function SettingsPage() {
       } else {
         root.classList.remove("dark");
       }
-      localStorage.setItem("theme", "system");
     }
+    window.location.reload();
   };
-  // =========================================================================
+
+  // ==================== 【沛涵 暑假修正：抓取 Google 資料與安全氣囊防護】 ====================
+  const [userInfo, setUserInfo] = useState<{
+    name: string;
+    email: string;
+    avatarUrl: string;
+  }>({
+    name: "Loading...",
+    email: "Loading...",
+    avatarUrl: ""
+  });
+
+  useEffect(() => {
+    async function fetchUser() {
+      try {
+        // 溫和檢查 Session 狀態，若沒登入不會直接噴紅字崩潰
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session?.user) {
+          console.log("使用者目前未登入或 Session 已過期。");
+          setUserInfo({
+            name: "未登入使用者",
+            email: "none@goalflow.com",
+            avatarUrl: ""
+          });
+          return;
+        }
+
+        const user = session.user;
+        const googleMetadata = user.user_metadata;
+        
+        setUserInfo({
+          name: googleMetadata?.full_name || user.email?.split('@')[0] || "GoalFlow 使用者",
+          email: user.email || "",
+          avatarUrl: googleMetadata?.avatar_url || "" 
+        });
+      } catch (err) {
+        console.error("抓取使用者資料時發生未預期異常:", err);
+      }
+    }
+
+    fetchUser();
+  }, [router]);
+  // ===================================================================================
 
   const handleSignOut = async () => {
     try {
@@ -85,6 +122,9 @@ export default function SettingsPage() {
       console.error("系統異常：", err);
     }
   };
+
+  // 取得姓名首字當作頭貼備用文字（Fallback）
+  const userInitials = userInfo.name.substring(0, 2).toUpperCase();
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -105,29 +145,30 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
+            {/* ==================== 【動態綁定 Google 大頭貼】 ==================== */}
             <Avatar className="h-20 w-20">
-              <AvatarImage src="/avatar.png" />
+              <AvatarImage src={userInfo.avatarUrl} alt={userInfo.name} />
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl text-primary-foreground">
-                JD
+                {userInitials}
               </AvatarFallback>
             </Avatar>
+            {/* ==================================================================== */}
             <div>
-              <Button variant="outline" size="sm">Change Avatar</Button>
+              <Button variant="outline" size="sm" disabled>Google Account Managed</Button>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* ==================== 【動態綁定 姓名與 Email】 ==================== */}
             <div>
               <label className="mb-2 block text-sm font-medium">Name</label>
-              <Input defaultValue="John Doe" className="border-border/60 bg-muted/30" />
+              <Input value={userInfo.name} readOnly className="border-border/60 bg-muted/30 cursor-not-allowed text-muted-foreground" />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium">Email</label>
-              <Input defaultValue="john@example.com" disabled className="border-border/60 bg-muted/30" />
+              <Input value={userInfo.email} disabled className="border-border/60 bg-muted/30" />
             </div>
+            {/* ==================================================================== */}
           </div>
-          <Button className="w-fit bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90">
-            Save Changes
-          </Button>
         </CardContent>
       </Card>
 
@@ -274,8 +315,6 @@ export default function SettingsPage() {
               <p className="font-medium">Theme</p>
               <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
             </div>
-            
-            {/* ==================== 【沛涵 修改：綁定 currentTheme 狀態】 ==================== */}
             <Select value={currentTheme} onValueChange={handleThemeChange}>
               <SelectTrigger className="w-36 border-border/60 bg-muted/30">
                 <SelectValue />
@@ -286,8 +325,6 @@ export default function SettingsPage() {
                 <SelectItem value="system">System</SelectItem>
               </SelectContent>
             </Select>
-            {/* ========================================================================= */}
-            
           </div>
           <div className="flex items-center justify-between">
             <div>
