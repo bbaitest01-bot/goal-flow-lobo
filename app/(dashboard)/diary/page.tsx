@@ -14,6 +14,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+// 🏆 新增：引入 Dialog 彈出視窗元件
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Brain,
   Calendar,
@@ -22,7 +30,10 @@ import {
   Sparkles,
   Trash2,
   Plus,
-  X
+  X,
+  Loader2,      // 🏆 新增：轉圈圈圖示
+  CheckCircle2, // 🏆 新增：成功圖示
+  XCircle       // 🏆 新增：錯誤圖示
 } from "lucide-react"
 
 // --- 型別定義 ---
@@ -69,15 +80,32 @@ export default function DiaryPage() {
   const [newMoodText, setNewMoodText] = useState("")
   const [newMoodColor, setNewMoodColor] = useState("#8B5CF6") 
 
+  // 🏆 刪除確認彈窗的專屬狀態管理
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [entryToDelete, setEntryToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // 🏆 方案 A：左下角 bottom-24 的優雅提示狀態
+  const [toastMsg, setToastMsg] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ 
+    show: false, message: "", type: "success" 
+  })
+
   const today = new Date().toLocaleDateString('zh-TW', { 
     month: 'long', 
     day: 'numeric', 
     year: 'numeric' 
   })
 
+  // 🏆 呼叫提示的小幫手函式
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ show: true, message, type })
+    setTimeout(() => {
+      setToastMsg(prev => ({ ...prev, show: false }))
+    }, 3000)
+  }
+
   // --- 1. 認人抓取資料 (Fetch Data with user_id) ---
   const fetchData = async () => {
-    // 🚀 先向門衛請求「目前登入的使用者身分證明」
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
@@ -85,22 +113,20 @@ export default function DiaryPage() {
       return
     }
 
-    // 🎯 抓取「僅屬於目前登入者」的日記
     const { data: diariesData, error: diaryError } = await supabase
       .from("diaries")
       .select("*")
-      .eq("user_id", user.id)   // 🌟 核心：只撈符合自己 user_id 的日記
+      .eq("user_id", user.id)   
       .eq("is_deleted", false) 
       .order("created_at", { ascending: false })
     
     if (diaryError) console.error("日記抓取失敗:", diaryError.message)
     else if (diariesData) setEntries(diariesData)
 
-    // 🎯 抓取「僅屬於目前登入者」的自訂心情標籤
     const { data: presetsData, error: presetError } = await supabase
       .from("user_mood_presets")
       .select("*")
-      .eq("user_id", user.id)   // 🌟 核心：心情標籤也認人！沛涵建的蘿蔔組長看不到
+      .eq("user_id", user.id)   
       .order("created_at", { ascending: true })
 
     if (presetError) console.error("標籤抓取失敗:", presetError.message)
@@ -119,13 +145,14 @@ export default function DiaryPage() {
       .insert([{
         mood_text: newMoodText.trim(),
         mood_color: newMoodColor,
-        user_id: user.id // 🌟 核心：新增心情時綁定當前 user_id
+        user_id: user.id 
       }])
 
     if (!error) {
       setNewMoodText("")
       setIsAddingPreset(false)
       fetchData() 
+      showToast("標籤新增成功！", "success")
     }
   }
 
@@ -146,7 +173,10 @@ export default function DiaryPage() {
 
   // --- 3. 日記管理 (Entries) ---
   const handleSaveEntry = async () => {
-    if (!todayEntry.mood || !todayEntry.content) return
+    if (!todayEntry.mood || !todayEntry.content) {
+      showToast("請選擇心情並填寫日記內容！", "error");
+      return;
+    }
     setIsSubmitting(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -165,12 +195,15 @@ export default function DiaryPage() {
         mood_color: todayEntry.moodColor, 
         target_date: todayISO,
         energy_level: todayEntry.energyFeeling,
-        user_id: user.id // 🌟 核心：儲存日記時綁定當前 user_id
+        user_id: user.id 
       }])
 
     if (!error) {
       setTodayEntry({ mood: "", moodColor: "", energyFeeling: 5, content: "" })
       fetchData()
+      showToast("日記儲存成功！🎉", "success")
+    } else {
+      showToast("儲存失敗，請稍後再試", "error")
     }
     setIsSubmitting(false)
   }
@@ -184,8 +217,10 @@ export default function DiaryPage() {
     if (!error) {
       setEditingId(null); 
       fetchData();        
+      showToast("日記修改成功！🎉", "success");
     } else {
       console.error("更新失敗:", error.message);
+      showToast("修改失敗，請稍後再試", "error");
     }
   };
 
@@ -193,10 +228,17 @@ export default function DiaryPage() {
     fetchData();
   }, []);
 
-  const handleDeleteEntry = async (id: string, e: React.MouseEvent) => {
+  // 🏆 4. 攔截刪除動作：設定狀態並開啟正中間的確認彈窗
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setEntryToDelete(id);
+    setIsDeleteOpen(true);
+  };
 
-    if (!confirm("確定要將此日記移至垃圾桶嗎？")) return;
+  // 🏆 真正執行刪除的邏輯 (A+B組合技)
+  const executeDeleteEntry = async () => {
+    if (!entryToDelete) return;
+    setIsDeleting(true);
 
     const { error } = await supabase
       .from("diaries")
@@ -204,15 +246,18 @@ export default function DiaryPage() {
         is_deleted: true, 
         deleted_at: new Date().toISOString() 
       })
-      .eq("id", id);
+      .eq("id", entryToDelete);
 
     if (error) {
       console.error("刪除失敗:", error.message);
-      alert("刪除失敗，請稍後再試");
+      showToast("刪除失敗，請稍後再試", "error");
     } else {
       fetchData();
-      alert("已移至垃圾桶");
+      showToast("已移至垃圾桶", "success");
     }
+    setIsDeleteOpen(false);
+    setEntryToDelete(null);
+    setIsDeleting(false);
   };
 
   return (
@@ -244,7 +289,6 @@ export default function DiaryPage() {
               <div>
                 <label className="mb-3 block text-sm font-medium">現在感覺如何？</label>
                 
-                {/* 橫向滑軌區塊 (Excel 樣式) */}
                 <div className="flex overflow-x-auto pb-4 gap-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-zinc-800/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700 hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                   
                   {/* 新增心情的按鈕與輸入框 */}
@@ -345,14 +389,23 @@ export default function DiaryPage() {
                 />
               </div>
 
-              {/* 儲存按鈕 */}
+              {/* 🏆 儲存按鈕加上防手抖 Loading */}
               <Button 
                 onClick={handleSaveEntry}
                 disabled={!todayEntry.mood || !todayEntry.content || isSubmitting}
-                className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90"
+                className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90 transition-all"
               >
-                <Save className="h-4 w-4" />
-                {isSubmitting ? "儲存中..." : "儲存紀錄"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    儲存中...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    儲存紀錄
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -398,10 +451,12 @@ export default function DiaryPage() {
                           </div>
                           <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${expandedEntry === entry.id ? "rotate-180" : ""}`} />
                         </CollapsibleTrigger>
+                        
+                        {/* 🏆 修改這裡：點擊時呼叫攔截器，開啟中間確認彈窗 */}
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={(e) => handleDeleteEntry(entry.id, e)}
+                          onClick={(e) => handleDeleteClick(entry.id, e)}
                           className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -484,6 +539,56 @@ export default function DiaryPage() {
           </Card>
         </div>
       </div>
+
+      {/* 🏆 新增：正中間跳出的優雅「刪除確認對話框」 */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="border-border/40 bg-card max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>確定要刪除這篇日記嗎？</DialogTitle>
+            <DialogDescription>
+              此動作會將這篇日記移至垃圾桶，您之後可以在垃圾桶中復原它。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setIsDeleteOpen(false);
+                setEntryToDelete(null);
+              }}
+              disabled={isDeleting}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={executeDeleteEntry} 
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  刪除中...
+                </>
+              ) : (
+                '確認刪除'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🏆 左下角 bottom-24 的 Toast 提示元件 */}
+      {toastMsg.show && (
+        <div className={`fixed bottom-24 left-6 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg transition-all animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toastMsg.type === 'success' 
+            ? 'bg-green-500/10 border-green-500/20 text-green-500' 
+            : 'bg-red-500/10 border-red-500/20 text-red-500'
+        }`}>
+          {toastMsg.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+          <span className="text-sm font-medium">{toastMsg.message}</span>
+        </div>
+      )}
     </div>
   )
 }

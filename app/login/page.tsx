@@ -22,7 +22,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${currentUrl}/dashboard`,
+        // 🏆 芮的關鍵修正：必須先去 callback 兌換 Cookie，再由 callback 導向 dashboard！
+        redirectTo: `${currentUrl}/auth/callback?next=/dashboard`, 
         queryParams: {
           access_type: 'offline', 
           prompt: 'consent',     
@@ -48,7 +49,6 @@ export default function LoginPage() {
         {/* Left Panel - Login Card */}
         <div className="flex flex-1 items-center justify-center p-6 lg:p-12">
           <div className="w-full max-w-md">
-            {/* Back Link - 🎯 改用正宗 <a> 標籤，徹底解決換頁卡死 Bug */}
             <a 
               href="/" 
               className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -57,10 +57,8 @@ export default function LoginPage() {
               Back to home
             </a>
 
-            {/* Login Card */}
             <Card className="border-border/40 bg-card/60 backdrop-blur-xl">
               <CardContent className="p-8">
-                {/* Logo */}
                 <div className="mb-8 text-center">
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent">
                     <Sparkles className="h-7 w-7 text-primary-foreground" />
@@ -71,7 +69,6 @@ export default function LoginPage() {
                   </p>
                 </div>
 
-                {/* Google Sign In Button */}
                 <Button 
                   onClick={handleGoogleLogin}
                   size="lg" 
@@ -86,7 +83,6 @@ export default function LoginPage() {
                   Continue with Google
                 </Button>
 
-                {/* Helper Text */}
                 <p className="mt-6 text-center text-sm text-muted-foreground">
                   By continuing, you agree to our{" "}
                   <a href="#" className="text-primary hover:underline">Terms of Service</a>
@@ -94,7 +90,6 @@ export default function LoginPage() {
                   <a href="#" className="text-primary hover:underline">Privacy Policy</a>
                 </p>
 
-                {/* Feature Badges */}
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
                   {[
                     { icon: Target, label: "Goal Tracking" },
@@ -114,7 +109,6 @@ export default function LoginPage() {
               </CardContent>
             </Card>
 
-            {/* Demo Link */}
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Just exploring?{" "}
               <a href="/dashboard" className="text-primary hover:underline">
@@ -135,12 +129,10 @@ export default function LoginPage() {
   )
 }
 
-
 function PreviewCard() {
   return (
     <div className="relative">
       <div className="absolute -inset-4 rounded-2xl bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 blur-2xl" />
-      
       <Card className="relative border-border/40 bg-card/80 backdrop-blur-sm">
         <CardContent className="p-6">
           <div className="mb-6 flex items-center justify-between">
@@ -150,7 +142,6 @@ function PreviewCard() {
             </div>
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-accent" />
           </div>
-
           <div className="mb-6 rounded-xl border border-border/40 bg-muted/30 p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-medium">Daily Energy</span>
@@ -161,7 +152,6 @@ function PreviewCard() {
               <div className="h-full w-[72%] rounded-full bg-gradient-to-r from-primary to-accent" />
             </div>
           </div>
-
           <div className="mb-6">
             <h4 className="mb-3 text-sm font-medium">Active Goals</h4>
             <div className="flex flex-col gap-2">
@@ -184,7 +174,6 @@ function PreviewCard() {
               ))}
             </div>
           </div>
-
           <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Brain className="h-5 w-5 text-accent" />
