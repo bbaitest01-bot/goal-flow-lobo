@@ -15,6 +15,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+// 🏆 新增：引入 Dialog 彈出視窗元件
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Search,
   MoreHorizontal,
@@ -22,7 +30,10 @@ import {
   Zap,
   Trash2,
   CheckSquare,
-  Target
+  Target,
+  Loader2,      // 🏆 新增：轉圈圈圖示
+  XCircle,      // 🏆 新增：錯誤圖示
+  CheckCircle2  // 🏆 新增：成功圖示
 } from "lucide-react"
 
 export default function TasksPage() {
@@ -30,6 +41,16 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"all" | "today" | "upcoming" | "done">("all")
+
+  // 🏆 刪除確認彈窗的專屬狀態管理
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<any | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false) 
+
+  // 🏆 方案 A：左下角 bottom-24 的優雅提示狀態
+  const [toastMsg, setToastMsg] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ 
+    show: false, message: "", type: "success" 
+  })
 
   // 1. 撈取資料（隔離防線）
   const fetchTasks = async () => {
@@ -71,6 +92,14 @@ export default function TasksPage() {
     fetchTasks()
   }, [])
 
+  // 🏆 呼叫提示的小幫手函式 (3秒後自動消失)
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ show: true, message, type })
+    setTimeout(() => {
+      setToastMsg(prev => ({ ...prev, show: false }))
+    }, 3000)
+  }
+
   // 2. 更新 RPE 分數與能量值
   const handleUpdateRPE = async (id: string, newRpe: number) => {
     const newEnergy = newRpe * 3; 
@@ -110,20 +139,37 @@ export default function TasksPage() {
     }
   }
 
-  // 4. 邏輯刪除
-  const handleDeleteTask = async (id: string) => {
-    if (!confirm("確定要將此任務移至垃圾桶嗎？")) return
+  // 🏆 4. 攔截刪除動作：不使用 confirm，改為開啟正中間的確認彈窗
+  const handleDeleteTask = (id: string) => {
+    const target = tasks.find(t => t.id === id)
+    if (target) {
+      setTaskToDelete(target)
+      setIsDeleteOpen(true)
+    }
+  }
 
+  // 🏆 真正執行資料庫刪除的核心邏輯（套用 A+B 組合技）
+  const executeDeleteTask = async () => {
+    if (!taskToDelete) return
+    
+    setIsDeleting(true) // 按鈕開始轉圈圈
+    
     const { error } = await supabase
       .from("tasks")
       .update({ is_deleted: true }) 
-      .eq("id", id)
+      .eq("id", taskToDelete.id)
 
     if (!error) {
-      setTasks(tasks.filter(t => t.id !== id))
+      setTasks(tasks.filter(t => t.id !== taskToDelete.id))
+      setIsDeleteOpen(false) // 關閉正中間的確認視窗
+      setTaskToDelete(null)
+      showToast("已丟入垃圾桶", "success") // 吐司提示
     } else {
       console.error("刪除任務失敗:", error.message)
+      showToast("刪除失敗，請稍後再試", "error")
     }
+    
+    setIsDeleting(false) // 結束轉圈圈
   }
 
   // 資料過濾
@@ -291,6 +337,57 @@ export default function TasksPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 🏆 新增：正中間跳出的優雅「刪除確認對話框」 */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="border-border/40 bg-card max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>確定要刪除嗎？</DialogTitle>
+            <DialogDescription>
+              您正準備刪除任務：「{taskToDelete?.title}」。<br />
+              此動作會將其移至垃圾桶，您之後可以在垃圾桶中復原。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setIsDeleteOpen(false);
+                setTaskToDelete(null);
+              }}
+              disabled={isDeleting}
+            >
+              取消
+            </Button>
+            <Button 
+              onClick={executeDeleteTask} 
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  刪除中...
+                </>
+              ) : (
+                '確認刪除'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🏆 左下角 bottom-24 的 Toast 提示元件 */}
+      {toastMsg.show && (
+        <div className={`fixed bottom-24 left-6 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg transition-all animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toastMsg.type === 'success' 
+            ? 'bg-green-500/10 border-green-500/20 text-green-500' 
+            : 'bg-red-500/10 border-red-500/20 text-red-500'
+        }`}>
+          {toastMsg.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+          <span className="text-sm font-medium">{toastMsg.message}</span>
+        </div>
+      )}
     </div>
   )
 }
