@@ -6,7 +6,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Plus } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { ArrowRight, Plus, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
@@ -18,12 +25,21 @@ interface Task {
   goal: string
 }
 
-export function TodaysTasks() {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+const getTodayDateString = () => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
-  // --- 1. 撈取當前登入者的今日任務 ---
+// 🌟 重點修改：加上 onToggle 參數
+export function TodaysTasks({ onToggle }: { onToggle?: () => void }) {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [newTask, setNewTask] = useState({ title: "", rpe_score: 5 })
+
   const fetchTasks = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -31,8 +47,9 @@ export function TodaysTasks() {
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
-      .eq("user_id", user.id) // 🌟 嚴格隔離：只撈目前使用者的任務
-    
+      .eq("user_id", user.id)
+      .eq("is_deleted", false)
+      .eq("target_date", getTodayDateString()) // 🌟 核心過濾：只抓今天的任務！
 
     if (error) {
       console.error("任務撈取失敗:", error.message)
@@ -41,8 +58,8 @@ export function TodaysTasks() {
         id: t.id,
         title: t.title,
         rpe: t.rpe_score || 5,
-        done: t.status === "completed", 
-        goal: "Graduation Project",    
+        done: t.is_completed, 
+        goal: "GoalFlow Project",    
       }))
       setTasks(formattedTasks)
     }
@@ -52,132 +69,108 @@ export function TodaysTasks() {
     fetchTasks()
   }, [])
 
-  // --- 🌟 2. 新增：點擊打勾即時連動 Supabase 狀態 ---
   const handleToggleTodo = async (taskId: string | number, currentStatus: boolean) => {
-    // 立即優化前端 UI 體驗（不卡頓）
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: !currentStatus } : t))
+    const newStatus = !currentStatus
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: newStatus } : t))
 
-    const nextStatus = !currentStatus ? "completed" : "todo"
-
-    const { error } = await supabase
+    await supabase
       .from("tasks")
-      .update({ status: nextStatus })
+      .update({ 
+        is_completed: newStatus,
+        completed_at: newStatus ? getTodayDateString() : null 
+      })
       .eq("id", taskId)
-
-    if (error) {
-      console.error("更新任務狀態失敗:", error.message)
-      // 失敗時倒滾回來
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: currentStatus } : t))
-    }
+      
+    // 🌟 重點修改：通知父元件資料已更新！
+    if (onToggle) onToggle()
   }
 
-  // --- 3. 動態綁定帳號手動新增任務 ---
   const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) return
-
-    setIsLoading(true)
-
+    if (!newTask.title.trim()) return
+    setIsSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
     
-    if (!user) {
-      alert("請先登入系統！")
-      setIsLoading(false)
-      return
-    }
+    await supabase.from("tasks").insert([{
+      title: newTask.title,
+      user_id: user?.id,
+      rpe_score: newTask.rpe_score,
+      energy_cost: newTask.rpe_score * 3,
+      target_date: getTodayDateString(),
+      is_completed: false
+    }])
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert([
-        {
-          title: newTaskTitle.trim(),
-          user_id: user.id, // 🌟 自動綁定目前登入帳號
-          goal_id: "d8865988-327f-47f2-a277-e41ba6dc7eb2", 
-          rpe_score: 5,
-          energy_cost: 20,
-          status: "todo",
-          priority: "medium",
-        },
-      ])
-      .select()
-
-    setIsLoading(false)
-
-    if (error) {
-      alert("新增失敗：" + error.message)
-    } else if (data) {
-      fetchTasks()
-      setNewTaskTitle("")
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleAddTask()
-    }
+    setIsSubmitting(false)
+    setIsCreateOpen(false)
+    setNewTask({ title: "", rpe_score: 5 }) // 重置回預設值 5
+    fetchTasks()
   }
 
   return (
-    <Card className="border-border/40">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-lg font-semibold">Today&apos;s Tasks</CardTitle>
+    <Card className="border-border/40 flex flex-col h-[320px]">
+      <CardHeader className="flex flex-row items-center justify-between pb-2 shrink-0">
+        <CardTitle className="text-lg font-semibold">今日任務</CardTitle>
         <Link href="/tasks">
           <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-            View all
+            查看全部
             <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {/* Add Task Input */}
-        <div className="flex items-center gap-2 mb-2">
-          <Input
-            placeholder="新增任務..."
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button 
-            onClick={handleAddTask} 
-            disabled={isLoading || !newTaskTitle.trim()}
-            size="sm"
-            className="gap-1"
-          >
-            <Plus className="h-4 w-4" />
-            新增
-          </Button>
-        </div>
-
-        {/* Task List */}
-        {tasks.length === 0 ? (
-          <p className="text-muted-foreground text-sm py-4 text-center">今日尚無安排任務</p>
-        ) : (
-          tasks.map((task) => (
-            <div 
-              key={task.id} 
-              className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
-            >
-              {/* 🌟 核心修正：將打勾狀態與點擊事件精準綁定 */}
-              <Checkbox 
-                checked={task.done} 
-                onCheckedChange={() => handleToggleTodo(task.id, task.done)}
+      
+      <CardContent className="flex flex-col gap-2 flex-1 overflow-hidden">
+        {/* 🌟 Dialog 新增模式 */}
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button className="w-full gap-2 mb-2" variant="outline">
+              <Plus className="h-4 w-4" /> 新增任務
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="border-border/40 bg-card">
+            <DialogHeader>
+              <DialogTitle>新增今日任務</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 pt-4">
+              <Input placeholder="任務標題" value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} />
+              
+              {/* 【重點修改】：加入 RPE 1~10 限制 */}
+              <Input 
+                type="number" 
+                min={1} 
+                max={10} 
+                placeholder="疲勞值 (1-10)" 
+                value={newTask.rpe_score} 
+                onChange={(e) => {
+                  let val = Number(e.target.value)
+                  if (val > 10) val = 10 // 超過 10 自動變 10
+                  if (val < 1) val = 1   // 小於 1 (如 0 或負數) 自動變 1
+                  setNewTask({...newTask, rpe_score: val})
+                }} 
               />
-              <div className="flex-1">
-                <p className={task.done ? "line-through text-muted-foreground" : ""}>
-                  {task.title}
-                </p>
-                <p className="text-xs text-muted-foreground">{task.goal}</p>
-              </div>
-              <Badge 
-                variant="secondary" 
-                className={`text-xs ${task.rpe >= 7 ? 'bg-red-500/20 text-red-400' : task.rpe >= 5 ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}
-              >
-                RPE {task.rpe}
-              </Badge>
+
+              <Button onClick={handleAddTask} disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : "確認新增"}
+              </Button>
             </div>
-          ))
-        )}
+          </DialogContent>
+        </Dialog>
+
+        <div className="flex-1 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+          {tasks.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4 text-center">今日尚無安排任務</p>
+          ) : (
+            tasks.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 rounded-lg bg-muted/20 p-3">
+                <Checkbox checked={task.done} onCheckedChange={() => handleToggleTodo(task.id, task.done)} />
+                <div className="flex-1">
+                  <p className={task.done ? "line-through text-muted-foreground text-sm" : "text-sm font-medium"}>
+                    {task.title}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="text-xs">RPE {task.rpe}</Badge>
+              </div>
+            ))
+          )}
+        </div>
       </CardContent>
     </Card>
   )

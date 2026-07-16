@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react" // 🌟 引入 hook
-import { supabase } from "@/lib/supabase"  // 🌟 引入 supabase
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"  
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Zap,
   Target,
@@ -18,99 +17,231 @@ import {
   AlertTriangle
 } from "lucide-react"
 import Link from "next/link"
+
+// 引入三大獨立元件
 import { TodaysTasks } from "@/components/todays-tasks"
-
-// 建立目標的型別
-interface Goal {
-  id: string
-  title: string
-  progress: number
-  deadline: string
-  tasks: number
-  completedTasks: number
-}
-
-const todaysChores = [
-  { id: 1, title: "Reply to emails", rpe: 2, done: true },
-  { id: 2, title: "Organize desktop files", rpe: 2, done: false },
-  { id: 3, title: "Schedule meeting", rpe: 1, done: false },
-]
+import { ActiveGoals } from "@/components/active-goals"
+import { TodaysChores } from "@/components/todays-chores"
 
 const weeklyActivity = [
-  [2, 4, 3, 5, 2, 1, 0],
+  [2, 4, 3, 5, 2, 1, 1],
   [3, 5, 4, 6, 3, 2, 1],
   [4, 3, 5, 4, 5, 3, 2],
   [5, 6, 4, 7, 4, 2, 1],
 ]
 
-export default function DashboardPage() {
-  const [activeGoals, setActiveGoals] = useState<Goal[]>([]) // 🌟 改用 state 管理目標
-  const energyUsed = 55
-  const totalEnergy = 100
-  const remainingEnergy = totalEnergy - energyUsed
+// 取得今日日期的 Helper Function
+const getTodayDateString = () => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
-  // 🌟 連線撈取真正屬於目前登入者的目標
-  const fetchGoals = async () => {
+// 取得過去第 N 天日期的 Helper Function
+const getPastDateString = (daysAgo: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export default function DashboardPage() {
+  const [energyUsed, setEnergyUsed] = useState(0)  
+  const totalEnergy = 100
+
+  // 統計數據狀態
+  const [streak, setStreak] = useState(0)
+  const [streakTrend, setStreakTrend] = useState({ text: "計算中...", isUp: true })
+  const [weeklyTasks, setWeeklyTasks] = useState(0)
+  const [weeklyTasksTrend, setWeeklyTasksTrend] = useState({ text: "計算中...", isUp: true })
+  
+  // 修改後：目標統計狀態
+  const [activeGoalCount, setActiveGoalCount] = useState(0)
+  const [goalTrendText, setGoalTrendText] = useState("計算中...")
+  
+  const [prodScore, setProdScore] = useState(0)
+  const [prodTrend, setProdTrend] = useState({ text: "計算中...", isUp: true })
+
+  // 1. 計算目標統計 (進行中數量 + 平均進度)
+  const fetchGoalsStats = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data, error } = await supabase.from("goals").select("*").eq("user_id", user.id)
+    if (data) {
+      const activeGoals = data.filter((g: any) => (g.progress_percent || 0) < 100)
+      setActiveGoalCount(activeGoals.length)
+      
+      const totalProgress = activeGoals.reduce((sum, g) => sum + (g.progress_percent || 0), 0)
+      const avg = activeGoals.length > 0 ? Math.round(totalProgress / activeGoals.length) : 0
+      setGoalTrendText(`平均進度 ${avg}%`)
+    }
+  }
+
+  // 2. 計算今日消耗精力
+  const fetchTodayEnergy = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const todayStr = getTodayDateString()
+    let totalUsed = 0
+    try {
+      const { data: choresData } = await supabase.from("chores").select("energy_cost").eq("user_id", user.id).eq("is_completed", true).eq("completed_at", todayStr)
+      if (choresData) totalUsed += choresData.reduce((sum, item) => sum + (item.energy_cost || 0), 0)
+
+      const { data: tasksData } = await supabase.from("tasks").select("energy_cost").eq("user_id", user.id).eq("is_completed", true).eq("completed_at", todayStr)
+      if (tasksData) totalUsed += tasksData.reduce((sum, item) => sum + (item.energy_cost || 0), 0)
+
+      setEnergyUsed(totalUsed)
+    } catch (error) {
+      console.error("精力計算發生錯誤:", error)
+    }
+  }
+
+  // 3. 計算進階數據 (連續天數、本週完成、生產力)
+  const fetchAdvancedStats = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data, error } = await supabase
-      .from("goals")
-      .select("*")
-      .eq("user_id", user.id) // 🔒 帳號隔離防線
+    try {
+      const { data: tasksData } = await supabase.from("tasks").select("target_date, completed_at, is_completed").eq("user_id", user.id).eq("is_deleted", false)
+      const { data: choresData } = await supabase.from("chores").select("target_date, completed_at, is_completed").eq("user_id", user.id)
 
-    if (error) {
-      console.error("目標撈取失敗:", error.message)
-    } else if (data) {
-      // 轉換後端資料格式以對齊前端 UI
-      const formattedGoals = data.map((g: any) => ({
-        id: g.id,
-        title: g.title || "未命名目標",
-        progress: g.progress_percent || 0, // 對齊資料庫裡的進度欄位，若名稱不同可再微調
-        deadline: g.target_date || "無截止日",
-        tasks: 10,
-        completedTasks: 4
-      }))
-      setActiveGoals(formattedGoals)
+      const allItems = [...(tasksData || []), ...(choresData || [])]
+
+      // --- 計算連續達成天數 (Streak) ---
+      const completedDates = new Set(
+        allItems.filter(item => item.is_completed && item.completed_at).map(item => item.completed_at)
+      )
+
+      const calculateStreakFrom = (startOffset: number) => {
+        let currentStreak = 0
+        let offset = startOffset
+        if (completedDates.has(getPastDateString(offset))) {
+          currentStreak++
+          offset++
+        } else if (startOffset === 0 && completedDates.has(getPastDateString(1))) {
+          offset = 1
+          currentStreak++
+          offset++
+        } else {
+          return 0
+        }
+        while (completedDates.has(getPastDateString(offset))) {
+          currentStreak++
+          offset++
+        }
+        return currentStreak
+      }
+
+      const currentStreak = calculateStreakFrom(0)
+      const lastWeekStreak = calculateStreakFrom(7)
+      
+      setStreak(currentStreak)
+      const streakDiff = currentStreak - lastWeekStreak
+      setStreakTrend({
+        text: streakDiff >= 0 ? `較上週多 ${streakDiff} 天` : `較上週少 ${Math.abs(streakDiff)} 天`,
+        isUp: streakDiff >= 0
+      })
+
+      // --- 計算本週完成數 ---
+      const isDateInRange = (dateStr: string, startDaysAgo: number, endDaysAgo: number) => {
+        if (!dateStr) return false
+        const endStr = getPastDateString(startDaysAgo) 
+        const startStr = getPastDateString(endDaysAgo) 
+        return dateStr >= startStr && dateStr <= endStr
+      }
+
+      const currScheduled = allItems.filter(i => isDateInRange(i.target_date, 0, 6)).length
+      const currCompleted = allItems.filter(i => isDateInRange(i.completed_at, 0, 6)).length
+      const prevScheduled = allItems.filter(i => isDateInRange(i.target_date, 7, 13)).length
+      const prevCompleted = allItems.filter(i => isDateInRange(i.completed_at, 7, 13)).length
+
+      setWeeklyTasks(currCompleted)
+      const tasksDiff = currCompleted - prevCompleted
+      setWeeklyTasksTrend({
+        text: tasksDiff >= 0 ? `較上週多 ${tasksDiff} 件` : `較上週少 ${Math.abs(tasksDiff)} 件`,
+        isUp: tasksDiff >= 0
+      })
+
+      // --- 計算生產力分數 ---
+      const rawCurrScore = currScheduled === 0 ? (currCompleted > 0 ? 100 : 0) : Math.round((currCompleted / currScheduled) * 100)
+      const currScore = Math.min(rawCurrScore, 100)
+      const rawPrevScore = prevScheduled === 0 ? (prevCompleted > 0 ? 100 : 0) : Math.round((prevCompleted / prevScheduled) * 100)
+      const prevScore = Math.min(rawPrevScore, 100)
+
+      setProdScore(currScore)
+
+      let trendText = ""
+      let isTrendUp = true
+
+      if (rawCurrScore > 100) {
+        trendText = `超額完成 ${rawCurrScore - 100}%！🔥`
+        isTrendUp = true
+      } else {
+        const prodDiff = currScore - prevScore
+        if (prodDiff > 0) {
+          trendText = `提升 ${prodDiff}%`
+          isTrendUp = true
+        } else if (prodDiff < 0) {
+          trendText = `下降 ${Math.abs(prodDiff)}%`
+          isTrendUp = false
+        } else {
+          trendText = currScore === 100 ? "完美持平 💯" : "與上週持平"
+          isTrendUp = true
+        }
+      }
+      setProdTrend({ text: trendText, isUp: isTrendUp })
+
+    } catch (error) {
+      console.error("進階數據計算發生錯誤:", error)
     }
   }
 
   useEffect(() => {
-    fetchGoals()
+    fetchGoalsStats()
+    fetchTodayEnergy() 
+    fetchAdvancedStats() 
   }, [])
+
+  // 🌟 重點修改：建立一個統一的更新函數，讓對講機可以同時刷新精力與統計
+  const handleDataRefresh = () => {
+    fetchTodayEnergy()
+    fetchAdvancedStats()
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Energy Card - Prominent */}
-      <Card className="border-border/40 bg-gradient-to-br from-card via-card to-primary/5">
+      {/* ⚡ Energy Card */}
+      <Card className={`transition-all duration-300 ${energyUsed >= totalEnergy ? "border-orange-500/50 bg-orange-500/5 animate-pulse" : "border-border/40 bg-gradient-to-br from-card via-card to-primary/5"}`}>
         <CardContent className="p-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex-1">
               <div className="mb-2 flex items-center gap-2">
-                <Zap className="h-6 w-6 text-primary" />
-                <h2 className="text-xl font-semibold">Daily Energy</h2>
+                <Zap className={`h-6 w-6 ${energyUsed >= totalEnergy ? "text-orange-400" : "text-primary"}`} />
+                <h2 className="text-xl font-semibold">今日精力</h2>
               </div>
-              <p className="mb-4 text-muted-foreground">
-                Track your energy to stay productive without burnout
-              </p>
+              <p className="mb-4 text-muted-foreground">掌握精力狀況，保持高效不倦怠</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold">{remainingEnergy}</span>
+                <span className={`text-4xl font-bold ${energyUsed >= totalEnergy ? "text-orange-400" : ""}`}>{energyUsed}</span>
                 <span className="text-xl text-muted-foreground">/ {totalEnergy}</span>
-                <span className="text-sm text-muted-foreground">energy remaining</span>
+                <span className="text-sm text-muted-foreground">今日已消耗精力</span>
               </div>
             </div>
             
             <div className="w-full lg:w-64">
               <div className="mb-2 h-4 overflow-hidden rounded-full bg-muted">
                 <div 
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all"
-                  style={{ width: `${remainingEnergy}%` }}
+                  className={`h-full rounded-full transition-all ${energyUsed >= totalEnergy ? "bg-orange-500" : "bg-gradient-to-r from-primary to-accent"}`}
+                  style={{ width: `${Math.min((energyUsed / totalEnergy) * 100, 100)}%` }} 
                 />
               </div>
-              {remainingEnergy < 30 && (
-                <div className="flex items-center gap-2 text-amber-400">
+              {energyUsed >= totalEnergy && (
+                <div className="flex items-center gap-2 text-orange-500 mt-2 font-medium">
                   <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm">Low energy - take it easy!</span>
+                  <span className="text-sm">精力破百！請適當休息</span>
                 </div>
               )}
             </div>
@@ -120,114 +251,23 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          icon={Flame}
-          label="Current Streak"
-          value="7 days"
-          trend="+2 from last week"
-          trendUp
-        />
-        <StatCard 
-          icon={CheckCircle2}
-          label="Tasks This Week"
-          value="23"
-          trend="5 more than usual"
-          trendUp
-        />
-        <StatCard 
-          icon={Target}
-          label="Goals Completed"
-          value="3"
-          trend="This month"
-        />
-        <StatCard 
-          icon={TrendingUp}
-          label="Productivity Score"
-          value="85%"
-          trend="+12% improvement"
-          trendUp
-        />
+        <StatCard icon={Flame} label="連續達成天數" value={`${streak} 天`} trend={streakTrend.text} trendUp={streakTrend.isUp} />
+        <StatCard icon={CheckCircle2} label="本週完成任務" value={`${weeklyTasks} 件`} trend={weeklyTasksTrend.text} trendUp={weeklyTasksTrend.isUp} />
+        <StatCard icon={Target} label="進行中目標" value={`${activeGoalCount} 個`} trend={goalTrendText} trendUp={true} />
+        <StatCard icon={TrendingUp} label="生產力分數" value={`${prodScore}%`}  trend={prodTrend.text} trendUp={prodTrend.isUp} />
       </div>
 
-      {/* Main Grid */}
+      {/* Main Grid: 包含三大元件與活躍度圖表 */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Active Goals */}
-        <Card className="border-border/40">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-semibold">Active Goals</CardTitle>
-            <Link href="/goals">
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-                View all
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {activeGoals.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-4 text-center">目前尚無進行中的目標</p>
-            ) : (
-              activeGoals.map((goal) => (
-                <Link key={goal.id} href={`/goals/${goal.id}`}>
-                  <div className="group rounded-lg border border-border/40 bg-muted/20 p-4 transition-colors hover:bg-muted/40">
-                    <div className="mb-3 flex items-start justify-between">
-                      <div>
-                        <h3 className="font-medium group-hover:text-primary transition-colors">{goal.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {goal.completedTasks}/{goal.tasks} tasks
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        <Clock className="mr-1 h-3 w-3" />
-                        {goal.deadline}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Progress value={goal.progress} className="h-2 flex-1" />
-                      <span className="text-sm font-medium">{goal.progress}%</span>
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Today's Tasks */}
-        <TodaysTasks />
-
-        {/* Today's Chores */}
-        <Card className="border-border/40">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-semibold">Today&apos;s Chores</CardTitle>
-            <Link href="/chores">
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-                View all
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {todaysChores.map((chore) => (
-              <div 
-                key={chore.id} 
-                className="flex items-center gap-3 rounded-lg bg-muted/20 p-3"
-              >
-                <Checkbox checked={chore.done} />
-                <p className={`flex-1 ${chore.done ? "line-through text-muted-foreground" : ""}`}>
-                  {chore.title}
-                </p>
-                <Badge variant="secondary" className="bg-primary/20 text-primary text-xs">
-                  RPE {chore.rpe}
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Weekly Activity Heatmap */}
+        <ActiveGoals />
+        {/* 🌟 重點修改：將統一更新函數傳給兩個子元件 */}
+        <TodaysTasks onToggle={handleDataRefresh} />
+        <TodaysChores onToggle={handleDataRefresh} />
+        
+        {/* 本週活躍度 */}
         <Card className="border-border/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">Weekly Activity</CardTitle>
+            <CardTitle className="text-lg font-semibold">本週活躍度</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-1">
@@ -242,37 +282,23 @@ export default function DashboardPage() {
                           ? 'hsl(var(--muted))' 
                           : `oklch(0.65 0.25 290 / ${Math.min(value * 15, 100)}%)`
                       }}
-                      title={`${value} tasks completed`}
+                      title={`已完成 ${value} 件任務`}
                     />
                   ))}
                 </div>
               ))}
               <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
+                <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
               </div>
             </div>
             <div className="mt-4 flex items-center justify-end gap-2 text-xs text-muted-foreground">
-              <span>Less</span>
+              <span>少</span>
               <div className="flex gap-1">
                 {[0, 2, 4, 6].map((v) => (
-                  <div
-                    key={v}
-                    className="h-3 w-3 rounded"
-                    style={{
-                      backgroundColor: v === 0 
-                        ? 'hsl(var(--muted))' 
-                        : `oklch(0.65 0.25 290 / ${Math.min(v * 15, 100)}%)`
-                    }}
-                  />
+                  <div key={v} className="h-3 w-3 rounded" style={{ backgroundColor: v === 0 ? 'hsl(var(--muted))' : `oklch(0.65 0.25 290 / ${Math.min(v * 15, 100)}%)` }} />
                 ))}
               </div>
-              <span>More</span>
+              <span>多</span>
             </div>
           </CardContent>
         </Card>
@@ -281,26 +307,14 @@ export default function DashboardPage() {
   )
 }
 
-function StatCard({ 
-  icon: Icon, 
-  label, 
-  value, 
-  trend,
-  trendUp 
-}: { 
-  icon: React.ElementType
-  label: string
-  value: string
-  trend?: string
-  trendUp?: boolean
-}) {
+function StatCard({ icon: Icon, label, value, trend, trendUp }: any) {
   return (
     <Card className="border-border/40">
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <Icon className="h-5 w-5 text-primary" />
           {trend && (
-            <span className={`text-xs ${trendUp ? 'text-green-400' : 'text-muted-foreground'}`}>
+            <span className={`text-xs ${trendUp ? 'text-green-400' : 'text-red-400'}`}>
               {trend}
             </span>
           )}
