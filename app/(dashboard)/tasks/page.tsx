@@ -15,13 +15,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-// 🏆 新增：引入 Dialog 彈出視窗元件
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger, 
 } from "@/components/ui/dialog"
 import {
   Search,
@@ -31,10 +31,21 @@ import {
   Trash2,
   CheckSquare,
   Target,
-  Loader2,      // 🏆 新增：轉圈圈圖示
-  XCircle,      // 🏆 新增：錯誤圖示
-  CheckCircle2  // 🏆 新增：成功圖示
+  Loader2,      
+  XCircle,      
+  CheckCircle2, 
+  Plus,         
+  Edit          // 🏆 新增：編輯任務的圖示
 } from "lucide-react"
+
+// 取得今日日期的 Helper Function
+const getTodayDateString = () => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([])
@@ -42,12 +53,25 @@ export default function TasksPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"all" | "today" | "upcoming" | "done">("all")
 
-  // 🏆 刪除確認彈窗的專屬狀態管理
+  // 刪除確認彈窗的專屬狀態管理
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [taskToDelete, setTaskToDelete] = useState<any | null>(null)
   const [isDeleting, setIsDeleting] = useState(false) 
 
-  // 🏆 方案 A：左下角 bottom-24 的優雅提示狀態
+  // 新增任務的狀態管理
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [newTask, setNewTask] = useState({
+    title: "",
+    rpe_score: 5,
+    target_date: getTodayDateString()
+  })
+
+  // 🏆 編輯任務的狀態管理
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<any | null>(null)
+
+  // 提示狀態
   const [toastMsg, setToastMsg] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ 
     show: false, message: "", type: "success" 
   })
@@ -72,12 +96,12 @@ export default function TasksPage() {
         ...t,
         id: t.id,
         title: t.title,
-        done: t.is_completed, // 🌟 修正：直接讀取 is_completed (布林值)
+        done: t.is_completed, 
         rpe: t.rpe_score || 5,
         energyCost: t.energy_cost || 0, 
         dueDate: t.target_date || "No Date",
         goalTitle: "GoalFlow Project", 
-        status: t.is_completed ? "done" : "todo" // 🌟 修正：根據布林值給予 todo 或 done
+        status: t.is_completed ? "done" : "todo" 
       }))
       setTasks(formattedTasks)
     }
@@ -92,7 +116,7 @@ export default function TasksPage() {
     fetchTasks()
   }, [])
 
-  // 🏆 呼叫提示的小幫手函式 (3秒後自動消失)
+  // 呼叫提示的小幫手函式 (3秒後自動消失)
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToastMsg({ show: true, message, type })
     setTimeout(() => {
@@ -100,7 +124,93 @@ export default function TasksPage() {
     }, 3000)
   }
 
-  // 2. 更新 RPE 分數與能量值
+  // 處理新增任務
+  const handleCreateTask = async () => {
+    if (!newTask.title) {
+      showToast("請輸入任務標題！", "error")
+      return
+    }
+
+    setIsSubmitting(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const taskData = {
+      user_id: user?.id,
+      title: newTask.title,
+      rpe_score: newTask.rpe_score,
+      energy_cost: newTask.rpe_score * 3, 
+      target_date: newTask.target_date,
+      is_completed: false,
+      is_deleted: false
+    }
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([taskData])
+      .select()
+
+    if (!error && data) {
+      const t = data[0]
+      setTasks([...tasks, {
+        ...t,
+        id: t.id,
+        title: t.title,
+        done: t.is_completed,
+        rpe: t.rpe_score,
+        energyCost: t.energy_cost,
+        dueDate: t.target_date,
+        goalTitle: "GoalFlow Project",
+        status: "todo"
+      }])
+      setIsCreateOpen(false)
+      setNewTask({ title: "", rpe_score: 5, target_date: getTodayDateString() })
+      showToast("任務新增成功！🎉", "success")
+    } else {
+      console.error("新增失敗:", error?.message)
+      showToast("新增失敗，請稍後再試", "error")
+    }
+    setIsSubmitting(false)
+  }
+
+  // 🏆 處理修改任務 (手動編輯)
+  const handleUpdateTask = async () => {
+    if (!editingTask || !editingTask.title) {
+      showToast("任務標題不能為空！", "error")
+      return
+    }
+
+    setIsSubmitting(true)
+    const newEnergy = editingTask.rpe_score * 3
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        title: editingTask.title,
+        rpe_score: editingTask.rpe_score,
+        energy_cost: newEnergy,
+        target_date: editingTask.target_date
+      })
+      .eq("id", editingTask.id)
+
+    if (!error) {
+      setTasks(tasks.map(t => t.id === editingTask.id ? {
+        ...t,
+        title: editingTask.title,
+        rpe: editingTask.rpe_score,
+        energyCost: newEnergy,
+        dueDate: editingTask.target_date
+      } : t))
+      setIsEditOpen(false)
+      setEditingTask(null)
+      showToast("任務修改成功！🎉", "success")
+    } else {
+      console.error("修改失敗:", error.message)
+      showToast("修改失敗，請稍後再試", "error")
+    }
+    setIsSubmitting(false)
+  }
+
+  // 更新 RPE 分數與能量值
   const handleUpdateRPE = async (id: string, newRpe: number) => {
     const newEnergy = newRpe * 3; 
     const { error } = await supabase
@@ -113,21 +223,29 @@ export default function TasksPage() {
 
     if (!error) {
       setTasks(tasks.map(t => t.id === id ? { ...t, rpe: newRpe, energyCost: newEnergy } : t))
+      showToast("RPE 更新成功！", "success") 
     } else {
       console.error("Supabase 更新失敗:", error.message)
+      showToast("RPE 更新失敗", "error") 
     }
   }
 
-  // 🌟 修正後的打勾功能：精準對齊資料庫真實的 is_completed 欄位
+  // 🌟 修正後的打勾功能：拔除成功 Toast，只保留異常警告
   const handleToggleTask = async (id: any, currentDone: boolean) => {
+    const newStatus = !currentDone
+    const completedDate = newStatus ? getTodayDateString() : null
+
     // 搶先更新前端狀態（讓使用者操作不卡頓）
     setTasks(tasks.map(t => 
-      t.id === id ? { ...t, done: !currentDone, status: !currentDone ? "done" : "todo" } : t
+      t.id === id ? { ...t, done: newStatus, status: newStatus ? "done" : "todo" } : t
     ))
 
     const { error } = await supabase
       .from("tasks")
-      .update({ is_completed: !currentDone }) // 🌟 這裡改成正確的 is_completed！
+      .update({ 
+        is_completed: newStatus,
+        completed_at: completedDate 
+      }) 
       .eq("id", id)
 
     if (error) {
@@ -136,10 +254,12 @@ export default function TasksPage() {
       setTasks(tasks.map(t => 
         t.id === id ? { ...t, done: currentDone, status: currentDone ? "done" : "todo" } : t
       ))
+      // 只有連線失敗時才干擾使用者
+      showToast("狀態更新失敗，請檢查網路連線", "error") 
     }
   }
 
-  // 🏆 4. 攔截刪除動作：不使用 confirm，改為開啟正中間的確認彈窗
+  // 攔截刪除動作
   const handleDeleteTask = (id: string) => {
     const target = tasks.find(t => t.id === id)
     if (target) {
@@ -148,11 +268,11 @@ export default function TasksPage() {
     }
   }
 
-  // 🏆 真正執行資料庫刪除的核心邏輯（套用 A+B 組合技）
+  // 真正執行資料庫刪除
   const executeDeleteTask = async () => {
     if (!taskToDelete) return
     
-    setIsDeleting(true) // 按鈕開始轉圈圈
+    setIsDeleting(true) 
     
     const { error } = await supabase
       .from("tasks")
@@ -161,15 +281,15 @@ export default function TasksPage() {
 
     if (!error) {
       setTasks(tasks.filter(t => t.id !== taskToDelete.id))
-      setIsDeleteOpen(false) // 關閉正中間的確認視窗
+      setIsDeleteOpen(false) 
       setTaskToDelete(null)
-      showToast("已丟入垃圾桶", "success") // 吐司提示
+      showToast("已丟入垃圾桶", "success") 
     } else {
       console.error("刪除任務失敗:", error.message)
       showToast("刪除失敗，請稍後再試", "error")
     }
     
-    setIsDeleting(false) // 結束轉圈圈
+    setIsDeleting(false) 
   }
 
   // 資料過濾
@@ -199,9 +319,72 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">All Tasks</h1>
-        <p className="text-muted-foreground">View and manage tasks across all your goals</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">All Tasks</h1>
+          <p className="text-muted-foreground">View and manage tasks across all your goals</p>
+        </div>
+
+        {/* 新增任務對話框 */}
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90">
+              <Plus className="h-4 w-4" />
+              新增任務
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="border-border/40 bg-card">
+            <DialogHeader>
+              <DialogTitle>新增任務</DialogTitle>
+              <DialogDescription>建立一個新的任務，推動您的專案進度</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 pt-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium">任務標題</label>
+                <Input 
+                  placeholder="例如：完成首頁 UI 設計"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium">RPE (疲勞度 1-10)</label>
+                <Input 
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={newTask.rpe_score}
+                  onChange={(e) => setNewTask({ ...newTask, rpe_score: Number(e.target.value) })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium">截止日期</label>
+                <Input 
+                  type="date"
+                  value={newTask.target_date}
+                  onChange={(e) => setNewTask({ ...newTask, target_date: e.target.value })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <Button 
+                onClick={handleCreateTask} 
+                disabled={isSubmitting}
+                className="mt-2 bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90 transition-all"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    處理中...
+                  </>
+                ) : (
+                  '確認新增'
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* 統計卡片 */}
@@ -268,7 +451,6 @@ export default function TasksPage() {
         <CardContent className="p-0">
           <div className="divide-y divide-border/40">
             {filteredTasks.length === 0 ? (
-              // 🌟 核心改動：如果 loading 還在跑，就先完全不著色、不跳出提示，保持優雅留白
               loading ? null : <p className="text-muted-foreground text-sm py-8 text-center">目前尚無符合條件的任務</p>
             ) : filteredTasks.map((task) => (
               <div key={task.id} className="group flex items-center gap-4 p-4 transition-colors hover:bg-muted/20">
@@ -318,7 +500,7 @@ export default function TasksPage() {
                     <Clock className="h-4 w-4" />{task.dueDate}
                   </span>
                   
-                  {/* 操作選單 */}
+                  {/* 🏆 修改：操作選單加入「Edit 編輯」功能 */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
@@ -326,8 +508,22 @@ export default function TasksPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-card">
+                      <DropdownMenuItem 
+                        className="gap-2" 
+                        onClick={() => {
+                          setEditingTask({
+                            id: task.id,
+                            title: task.title,
+                            rpe_score: task.rpe,
+                            target_date: task.dueDate === "No Date" ? getTodayDateString() : task.dueDate
+                          })
+                          setIsEditOpen(true)
+                        }}
+                      >
+                        <Edit className="h-4 w-4" /> Edit
+                      </DropdownMenuItem>
                       <DropdownMenuItem className="gap-2 text-destructive" onClick={() => handleDeleteTask(task.id)}>
-                        <Trash2 className="h-4 w-4" />Delete
+                        <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -338,7 +534,63 @@ export default function TasksPage() {
         </CardContent>
       </Card>
 
-      {/* 🏆 新增：正中間跳出的優雅「刪除確認對話框」 */}
+      {/* 🏆 新增：編輯任務的專屬對話框 */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="border-border/40 bg-card">
+          <DialogHeader>
+            <DialogTitle>編輯任務</DialogTitle>
+            <DialogDescription>修改您的任務標題、RPE 或截止日期</DialogDescription>
+          </DialogHeader>
+          {editingTask && (
+            <div className="flex flex-col gap-4 pt-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium">任務標題</label>
+                <Input 
+                  value={editingTask.title}
+                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium">RPE (疲勞度 1-10)</label>
+                <Input 
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={editingTask.rpe_score}
+                  onChange={(e) => setEditingTask({ ...editingTask, rpe_score: Number(e.target.value) })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium">截止日期</label>
+                <Input 
+                  type="date"
+                  value={editingTask.target_date}
+                  onChange={(e) => setEditingTask({ ...editingTask, target_date: e.target.value })}
+                  className="border-border/60 bg-muted/30"
+                />
+              </div>
+              <Button 
+                onClick={handleUpdateTask} 
+                disabled={isSubmitting}
+                className="mt-2 bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-90 transition-all"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    儲存中...
+                  </>
+                ) : (
+                  '確認修改'
+                )}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 正中間跳出的優雅「刪除確認對話框」 */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogContent className="border-border/40 bg-card max-w-[400px]">
           <DialogHeader>
@@ -377,7 +629,7 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🏆 左下角 bottom-24 的 Toast 提示元件 */}
+      {/* 左下角 bottom-24 的 Toast 提示元件 */}
       {toastMsg.show && (
         <div className={`fixed bottom-24 left-6 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg transition-all animate-in slide-in-from-bottom-5 fade-in duration-300 ${
           toastMsg.type === 'success' 
